@@ -17,7 +17,7 @@ return [
         'node_deleted' => 'Le nœud a été supprimé du panneau avec succès.',
         'location_required' => 'Vous devez avoir au moins un emplacement configuré avant de pouvoir ajouter un nœud à ce panneau.',
         'node_created' => 'Nouveau nœud créé avec succès. Vous pouvez configurer automatiquement le démon sur cette machine en visitant l\'onglet \'Configuration \'. <strong> Avant de pouvoir ajouter des serveurs, vous devez d\'abord attribuer au moins une adresse IP et un port.</strong>',
-        'node_updated' => 'Node information has been updated. If any daemon settings were changed you will need to reboot it for those changes to take effect.',
+        'node_updated' => 'Les informations sur le nœud ont été mises à jour. Si des paramètres du démon ont été modifiés, vous devrez le redémarrer pour que ces modifications prennent effet.',
         'unallocated_deleted' => 'Suppression de tous les ports non alloués pour <code>:ip</code>.',
     ],
 ];
