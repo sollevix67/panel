@@ -55,8 +55,6 @@ class EggController extends Controller
     /**
      * Handle a request to display the Egg creation page.
      *
-     * @return \Illuminate\View\View
-     *
      * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
      */
     public function create(): View
@@ -70,15 +68,15 @@ class EggController extends Controller
     /**
      * Handle request to store a new Egg.
      *
-     * @param \Pterodactyl\Http\Requests\Admin\Egg\EggFormRequest $request
-     * @return \Illuminate\Http\RedirectResponse
-     *
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
      * @throws \Pterodactyl\Exceptions\Service\Egg\NoParentConfigurationFoundException
      */
     public function store(EggFormRequest $request): RedirectResponse
     {
-        $egg = $this->creationService->handle($request->normalize());
+        $data = $request->normalize();
+        $data['docker_images'] = $this->normalizeDockerImages($data['docker_images'] ?? null);
+
+        $egg = $this->creationService->handle($data);
         $this->alert->success(trans('admin/nests.eggs.notices.egg_created'))->flash();
 
         return redirect()->route('admin.nests.egg.view', $egg->id);
@@ -86,21 +84,21 @@ class EggController extends Controller
 
     /**
      * Handle request to view a single Egg.
-     *
-     * @param \Pterodactyl\Models\Egg $egg
-     * @return \Illuminate\View\View
      */
     public function view(Egg $egg): View
     {
-        return view('admin.eggs.view', ['egg' => $egg]);
+        return view('admin.eggs.view', [
+            'egg' => $egg,
+            'images' => array_map(
+                fn ($key, $value) => $key === $value ? $value : "$key|$value",
+                array_keys($egg->docker_images),
+                $egg->docker_images,
+            ),
+        ]);
     }
 
     /**
      * Handle request to update an Egg.
-     *
-     * @param \Pterodactyl\Http\Requests\Admin\Egg\EggFormRequest $request
-     * @param \Pterodactyl\Models\Egg $egg
-     * @return \Illuminate\Http\RedirectResponse
      *
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
      * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
@@ -108,7 +106,10 @@ class EggController extends Controller
      */
     public function update(EggFormRequest $request, Egg $egg): RedirectResponse
     {
-        $this->updateService->handle($egg, $request->normalize());
+        $data = $request->normalize();
+        $data['docker_images'] = $this->normalizeDockerImages($data['docker_images'] ?? null);
+
+        $this->updateService->handle($egg, $data);
         $this->alert->success(trans('admin/nests.eggs.notices.updated'))->flash();
 
         return redirect()->route('admin.nests.egg.view', $egg->id);
@@ -116,9 +117,6 @@ class EggController extends Controller
 
     /**
      * Handle request to destroy an egg.
-     *
-     * @param \Pterodactyl\Models\Egg $egg
-     * @return \Illuminate\Http\RedirectResponse
      *
      * @throws \Pterodactyl\Exceptions\Service\Egg\HasChildrenException
      * @throws \Pterodactyl\Exceptions\Service\HasActiveServersException
@@ -129,5 +127,23 @@ class EggController extends Controller
         $this->alert->success(trans('admin/nests.eggs.notices.deleted'))->flash();
 
         return redirect()->route('admin.nests.view', $egg->nest_id);
+    }
+
+    /**
+     * Normalizes a string of docker image data into the expected egg format.
+     */
+    protected function normalizeDockerImages(string $input = null): array
+    {
+        $data = array_map(fn ($value) => trim($value), explode("\n", $input ?? ''));
+
+        $images = [];
+        // Iterate over the image data provided and convert it into a name => image
+        // pairing that is used to improve the display on the front-end.
+        foreach ($data as $value) {
+            $parts = explode('|', $value, 2);
+            $images[$parts[0]] = empty($parts[1]) ? $parts[0] : $parts[1];
+        }
+
+        return $images;
     }
 }

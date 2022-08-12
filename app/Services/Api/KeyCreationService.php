@@ -25,9 +25,6 @@ class KeyCreationService
 
     /**
      * ApiKeyService constructor.
-     *
-     * @param \Pterodactyl\Contracts\Repository\ApiKeyRepositoryInterface $repository
-     * @param \Illuminate\Contracts\Encryption\Encrypter $encrypter
      */
     public function __construct(ApiKeyRepositoryInterface $repository, Encrypter $encrypter)
     {
@@ -39,7 +36,6 @@ class KeyCreationService
      * Set the type of key that should be created. By default an orphaned key will be
      * created. These keys cannot be used for anything, and will not render in the UI.
      *
-     * @param int $type
      * @return \Pterodactyl\Services\Api\KeyCreationService
      */
     public function setKeyType(int $type)
@@ -54,17 +50,13 @@ class KeyCreationService
      * This will automatically generate an identifier and an encrypted token that are
      * stored in the database.
      *
-     * @param array $data
-     * @param array $permissions
-     * @return \Pterodactyl\Models\ApiKey
-     *
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
      */
     public function handle(array $data, array $permissions = []): ApiKey
     {
         $data = array_merge($data, [
             'key_type' => $this->keyType,
-            'identifier' => str_random(ApiKey::IDENTIFIER_LENGTH),
+            'identifier' => ApiKey::generateTokenIdentifier($this->keyType),
             'token' => $this->encrypter->encrypt(str_random(ApiKey::KEY_LENGTH)),
         ]);
 

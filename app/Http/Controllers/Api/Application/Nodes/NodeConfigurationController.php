@@ -14,12 +14,10 @@ class NodeConfigurationController extends ApplicationApiController
      * to remote machines so long as an API key is provided to the machine to make the request
      * with, and the node is known.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Application\Nodes\GetNodeRequest $request
-     * @param \Pterodactyl\Models\Node $node
      * @return \Illuminate\Http\JsonResponse
      */
     public function __invoke(GetNodeRequest $request, Node $node)
     {
-        return JsonResponse::create($node->getConfiguration());
+        return new JsonResponse($node->getConfiguration());
     }
 }

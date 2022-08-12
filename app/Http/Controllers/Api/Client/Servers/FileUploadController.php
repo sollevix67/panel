@@ -19,8 +19,6 @@ class FileUploadController extends ClientApiController
 
     /**
      * FileUploadController constructor.
-     *
-     * @param \Pterodactyl\Services\Nodes\NodeJWTService $jwtService
      */
     public function __construct(
         NodeJWTService $jwtService
@@ -32,9 +30,6 @@ class FileUploadController extends ClientApiController
 
     /**
      * Returns a url where files can be uploaded to.
-     *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Files\UploadFileRequest $request
-     * @param \Pterodactyl\Models\Server $server
      *
      * @return \Illuminate\Http\JsonResponse
      */
@@ -51,23 +46,20 @@ class FileUploadController extends ClientApiController
     /**
      * Returns a url where files can be uploaded to.
      *
-     * @param \Pterodactyl\Models\Server $server
-     * @param \Pterodactyl\Models\User $user
      * @return string
      */
     protected function getUploadUrl(Server $server, User $user)
     {
         $token = $this->jwtService
             ->setExpiresAt(CarbonImmutable::now()->addMinutes(15))
-            ->setClaims([
-                'server_uuid' => $server->uuid,
-            ])
+            ->setUser($user)
+            ->setClaims(['server_uuid' => $server->uuid])
             ->handle($server->node, $user->id . $server->uuid);
 
         return sprintf(
             '%s/upload/file?token=%s',
             $server->node->getConnectionAddress(),
-            $token->__toString()
+            $token->toString()
         );
     }
 }

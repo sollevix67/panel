@@ -4,6 +4,7 @@ namespace Pterodactyl\Http\Controllers\Api\Client\Servers;
 
 use Illuminate\Http\Response;
 use Pterodactyl\Models\Server;
+use Pterodactyl\Facades\Activity;
 use Psr\Http\Message\ResponseInterface;
 use GuzzleHttp\Exception\BadResponseException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -21,8 +22,6 @@ class CommandController extends ClientApiController
 
     /**
      * CommandController constructor.
-     *
-     * @param \Pterodactyl\Repositories\Wings\DaemonCommandRepository $repository
      */
     public function __construct(DaemonCommandRepository $repository)
     {
@@ -33,10 +32,6 @@ class CommandController extends ClientApiController
 
     /**
      * Send a command to a running server.
-     *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\SendCommandRequest $request
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\Http\Response
      *
      * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
      */
@@ -52,14 +47,14 @@ class CommandController extends ClientApiController
                     $previous->getResponse() instanceof ResponseInterface
                     && $previous->getResponse()->getStatusCode() === Response::HTTP_BAD_GATEWAY
                 ) {
-                    throw new HttpException(
-                        Response::HTTP_BAD_GATEWAY, 'Server must be online in order to send commands.', $exception
-                    );
+                    throw new HttpException(Response::HTTP_BAD_GATEWAY, 'Server must be online in order to send commands.', $exception);
                 }
             }
 
             throw $exception;
         }
+
+        Activity::event('server:console.command')->property('command', $request->input('command'))->log();
 
         return $this->returnNoContent();
     }

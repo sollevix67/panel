@@ -51,7 +51,7 @@
                                 <td data-attr="info-system"><i class="fa fa-refresh fa-fw fa-spin"></i></td>
                             </tr>
                             <tr>
-                                <td>Total CPU Cores</td>
+                                <td>Total CPU Threads</td>
                                 <td data-attr="info-cpus"><i class="fa fa-refresh fa-fw fa-spin"></i></td>
                             </tr>
                         </table>
@@ -112,7 +112,7 @@
                             <span class="info-box-icon"><i class="ion ion-ios-folder-outline"></i></span>
                             <div class="info-box-content" style="padding: 15px 10px 0;">
                                 <span class="info-box-text">Disk Space Allocated</span>
-                                <span class="info-box-number">{{ $stats['disk']['value'] }} / {{ $stats['disk']['max'] }} Mb</span>
+                                <span class="info-box-number">{{ $stats['disk']['value'] }} / {{ $stats['disk']['max'] }} MB</span>
                                 <div class="progress">
                                     <div class="progress-bar" style="width: {{ $stats['disk']['percent'] }}%"></div>
                                 </div>
@@ -124,7 +124,7 @@
                             <span class="info-box-icon"><i class="ion ion-ios-barcode-outline"></i></span>
                             <div class="info-box-content" style="padding: 15px 10px 0;">
                                 <span class="info-box-text">Memory Allocated</span>
-                                <span class="info-box-number">{{ $stats['memory']['value'] }} / {{ $stats['memory']['max'] }} Mb</span>
+                                <span class="info-box-number">{{ $stats['memory']['value'] }} / {{ $stats['memory']['max'] }} MB</span>
                                 <div class="progress">
                                     <div class="progress-bar" style="width: {{ $stats['memory']['percent'] }}%"></div>
                                 </div>

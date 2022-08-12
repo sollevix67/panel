@@ -3,15 +3,17 @@
 namespace Pterodactyl\Http\Controllers\Api\Client\Servers;
 
 use Illuminate\Http\Request;
-use Pterodactyl\Models\User;
 use Pterodactyl\Models\Server;
-use Pterodactyl\Models\Subuser;
 use Illuminate\Http\JsonResponse;
+use Pterodactyl\Facades\Activity;
 use Pterodactyl\Models\Permission;
+use Illuminate\Support\Facades\Log;
 use Pterodactyl\Repositories\Eloquent\SubuserRepository;
 use Pterodactyl\Services\Subusers\SubuserCreationService;
+use Pterodactyl\Repositories\Wings\DaemonServerRepository;
 use Pterodactyl\Transformers\Api\Client\SubuserTransformer;
 use Pterodactyl\Http\Controllers\Api\Client\ClientApiController;
+use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 use Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\GetSubuserRequest;
 use Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\StoreSubuserRequest;
 use Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\DeleteSubuserRequest;
@@ -30,26 +32,28 @@ class SubuserController extends ClientApiController
     private $creationService;
 
     /**
+     * @var \Pterodactyl\Repositories\Wings\DaemonServerRepository
+     */
+    private $serverRepository;
+
+    /**
      * SubuserController constructor.
-     *
-     * @param \Pterodactyl\Repositories\Eloquent\SubuserRepository $repository
-     * @param \Pterodactyl\Services\Subusers\SubuserCreationService $creationService
      */
     public function __construct(
         SubuserRepository $repository,
-        SubuserCreationService $creationService
+        SubuserCreationService $creationService,
+        DaemonServerRepository $serverRepository
     ) {
         parent::__construct();
 
         $this->repository = $repository;
         $this->creationService = $creationService;
+        $this->serverRepository = $serverRepository;
     }
 
     /**
      * Return the users associated with this server instance.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\GetSubuserRequest $request
-     * @param \Pterodactyl\Models\Server $server
      * @return array
      */
     public function index(GetSubuserRequest $request, Server $server)
@@ -62,7 +66,6 @@ class SubuserController extends ClientApiController
     /**
      * Returns a single subuser associated with this server instance.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\GetSubuserRequest $request
      * @return array
      */
     public function view(GetSubuserRequest $request)
@@ -77,8 +80,6 @@ class SubuserController extends ClientApiController
     /**
      * Create a new subuser for the given server.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\StoreSubuserRequest $request
-     * @param \Pterodactyl\Models\Server $server
      * @return array
      *
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
@@ -89,8 +90,15 @@ class SubuserController extends ClientApiController
     public function store(StoreSubuserRequest $request, Server $server)
     {
         $response = $this->creationService->handle(
-            $server, $request->input('email'), $this->getDefaultPermissions($request)
+            $server,
+            $request->input('email'),
+            $this->getDefaultPermissions($request)
         );
+
+        Activity::event('server:subuser.create')
+            ->subject($response->user)
+            ->property(['email' => $request->input('email'), 'permissions' => $this->getDefaultPermissions($request)])
+            ->log();
 
         return $this->fractal->item($response)
             ->transformWith($this->getTransformer(SubuserTransformer::class))
@@ -100,20 +108,50 @@ class SubuserController extends ClientApiController
     /**
      * Update a given subuser in the system for the server.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\UpdateSubuserRequest $request
-     * @return array
-     *
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
      * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
      */
-    public function update(UpdateSubuserRequest $request): array
+    public function update(UpdateSubuserRequest $request, Server $server): array
     {
         /** @var \Pterodactyl\Models\Subuser $subuser */
         $subuser = $request->attributes->get('subuser');
 
-        $this->repository->update($subuser->id, [
-            'permissions' => $this->getDefaultPermissions($request),
-        ]);
+        $permissions = $this->getDefaultPermissions($request);
+        $current = $subuser->permissions;
+
+        sort($permissions);
+        sort($current);
+
+        $log = Activity::event('server:subuser.update')
+            ->subject($subuser->user)
+            ->property([
+                'email' => $subuser->user->email,
+                'old' => $current,
+                'new' => $permissions,
+                'revoked' => true,
+            ]);
+
+        // Only update the database and hit up the Wings instance to invalidate JTI's if the permissions
+        // have actually changed for the user.
+        if ($permissions !== $current) {
+            $log->transaction(function ($instance) use ($request, $subuser, $server) {
+                $this->repository->update($subuser->id, [
+                    'permissions' => $this->getDefaultPermissions($request),
+                ]);
+
+                try {
+                    $this->serverRepository->setServer($server)->revokeUserJTI($subuser->user_id);
+                } catch (DaemonConnectionException $exception) {
+                    // Don't block this request if we can't connect to the Wings instance. Chances are it is
+                    // offline in this event and the token will be invalid anyways once Wings boots back.
+                    Log::warning($exception, ['user_id' => $subuser->user_id, 'server_id' => $server->id]);
+
+                    $instance->property('revoked', false);
+                }
+            });
+        }
+
+        $log->reset();
 
         return $this->fractal->item($subuser->refresh())
             ->transformWith($this->getTransformer(SubuserTransformer::class))
@@ -123,24 +161,36 @@ class SubuserController extends ClientApiController
     /**
      * Removes a subusers from a server's assignment.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Subusers\DeleteSubuserRequest $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function delete(DeleteSubuserRequest $request)
+    public function delete(DeleteSubuserRequest $request, Server $server)
     {
         /** @var \Pterodactyl\Models\Subuser $subuser */
         $subuser = $request->attributes->get('subuser');
 
-        $this->repository->delete($subuser->id);
+        $log = Activity::event('server:subuser.delete')
+            ->subject($subuser->user)
+            ->property('email', $subuser->user->email)
+            ->property('revoked', true);
+
+        $log->transaction(function ($instance) use ($server, $subuser) {
+            $subuser->delete();
+
+            try {
+                $this->serverRepository->setServer($server)->revokeUserJTI($subuser->user_id);
+            } catch (DaemonConnectionException $exception) {
+                // Don't block this request if we can't connect to the Wings instance.
+                Log::warning($exception, ['user_id' => $subuser->user_id, 'server_id' => $server->id]);
+
+                $instance->property('revoked', false);
+            }
+        });
 
         return new JsonResponse([], JsonResponse::HTTP_NO_CONTENT);
     }
 
     /**
      * Returns the default permissions for all subusers to ensure none are ever removed wrongly.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @return array
      */
     protected function getDefaultPermissions(Request $request): array
     {

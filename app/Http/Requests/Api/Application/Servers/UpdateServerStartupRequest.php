@@ -20,12 +20,10 @@ class UpdateServerStartupRequest extends ApplicationApiRequest
 
     /**
      * Validation rules to run the input against.
-     *
-     * @return array
      */
     public function rules(): array
     {
-        $data = Server::getRulesForUpdate($this->getModel(Server::class));
+        $data = Server::getRulesForUpdate($this->parameter('server', Server::class));
 
         return [
             'startup' => $data['startup'],

@@ -2,6 +2,7 @@
 
 namespace Pterodactyl\Models;
 
+use Illuminate\Support\Str;
 use Symfony\Component\Yaml\Yaml;
 use Illuminate\Container\Container;
 use Illuminate\Notifications\Notifiable;
@@ -30,7 +31,6 @@ use Illuminate\Contracts\Encryption\Encrypter;
  * @property string $daemonBase
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
- *
  * @property \Pterodactyl\Models\Location $location
  * @property \Pterodactyl\Models\Mount[]|\Illuminate\Database\Eloquent\Collection $mounts
  * @property \Pterodactyl\Models\Server[]|\Illuminate\Database\Eloquent\Collection $servers
@@ -44,10 +44,10 @@ class Node extends Model
      * The resource name for this model when it is transformed into an
      * API representation using fractal.
      */
-    const RESOURCE_NAME = 'node';
+    public const RESOURCE_NAME = 'node';
 
-    const DAEMON_TOKEN_ID_LENGTH = 16;
-    const DAEMON_TOKEN_LENGTH = 64;
+    public const DAEMON_TOKEN_ID_LENGTH = 16;
+    public const DAEMON_TOKEN_LENGTH = 64;
 
     /**
      * The table associated with the model.
@@ -133,8 +133,6 @@ class Node extends Model
 
     /**
      * Get the connection address to use when making calls to this node.
-     *
-     * @return string
      */
     public function getConnectionAddress(): string
     {
@@ -157,9 +155,9 @@ class Node extends Model
                 'host' => '0.0.0.0',
                 'port' => $this->daemonListen,
                 'ssl' => [
-                    'enabled' => (! $this->behind_proxy && $this->scheme === 'https'),
-                    'cert' => '/etc/letsencrypt/live/' . $this->fqdn . '/fullchain.pem',
-                    'key' => '/etc/letsencrypt/live/' . $this->fqdn . '/privkey.pem',
+                    'enabled' => (!$this->behind_proxy && $this->scheme === 'https'),
+                    'cert' => '/etc/letsencrypt/live/' . Str::lower($this->fqdn) . '/fullchain.pem',
+                    'key' => '/etc/letsencrypt/live/' . Str::lower($this->fqdn) . '/privkey.pem',
                 ],
                 'upload_limit' => $this->upload_size,
             ],
@@ -187,7 +185,6 @@ class Node extends Model
     /**
      * Returns the configuration in JSON format.
      *
-     * @param bool $pretty
      * @return string
      */
     public function getJsonConfiguration(bool $pretty = false)
@@ -197,12 +194,10 @@ class Node extends Model
 
     /**
      * Helper function to return the decrypted key for a node.
-     *
-     * @return string
      */
     public function getDecryptedKey(): string
     {
-        return (string)Container::getInstance()->make(Encrypter::class)->decrypt(
+        return (string) Container::getInstance()->make(Encrypter::class)->decrypt(
             $this->daemon_token
         );
     }
@@ -247,10 +242,6 @@ class Node extends Model
 
     /**
      * Returns a boolean if the node is viable for an additional server to be placed on it.
-     *
-     * @param int $memory
-     * @param int $disk
-     * @return bool
      */
     public function isViable(int $memory, int $disk): bool
     {

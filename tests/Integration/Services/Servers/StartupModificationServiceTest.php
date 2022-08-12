@@ -3,10 +3,8 @@
 namespace Pterodactyl\Tests\Integration\Services\Servers;
 
 use Exception;
-use Ramsey\Uuid\Uuid;
-use Pterodactyl\Models\Egg;
-use Pterodactyl\Models\User;
 use Pterodactyl\Models\Nest;
+use Pterodactyl\Models\User;
 use Pterodactyl\Models\Server;
 use Pterodactyl\Models\ServerVariable;
 use Illuminate\Validation\ValidationException;
@@ -24,8 +22,7 @@ class StartupModificationServiceTest extends IntegrationTestCase
      */
     public function testNonAdminCanModifyServerVariables()
     {
-        // Theoretically lines up with the Bungeecord Minecraft egg.
-        $server = $this->createServerModel(['egg_id' => 1]);
+        $server = $this->createServerModel();
 
         try {
             $this->app->make(StartupModificationService::class)->handle($server, [
@@ -98,7 +95,7 @@ class StartupModificationServiceTest extends IntegrationTestCase
         $this->assertTrue($response->skip_scripts);
         // Make sure we don't revert back to a lurking bug that causes servers to get marked
         // as not installed when you modify the startup...
-        $this->assertSame(1, $response->installed);
+        $this->assertTrue($response->isInstalled());
     }
 
     /**

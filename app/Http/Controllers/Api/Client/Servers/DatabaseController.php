@@ -5,6 +5,7 @@ namespace Pterodactyl\Http\Controllers\Api\Client\Servers;
 use Illuminate\Http\Response;
 use Pterodactyl\Models\Server;
 use Pterodactyl\Models\Database;
+use Pterodactyl\Facades\Activity;
 use Pterodactyl\Repositories\Eloquent\DatabaseRepository;
 use Pterodactyl\Services\Databases\DatabasePasswordService;
 use Pterodactyl\Transformers\Api\Client\DatabaseTransformer;
@@ -40,11 +41,6 @@ class DatabaseController extends ClientApiController
 
     /**
      * DatabaseController constructor.
-     *
-     * @param \Pterodactyl\Services\Databases\DatabaseManagementService $managementService
-     * @param \Pterodactyl\Services\Databases\DatabasePasswordService $passwordService
-     * @param \Pterodactyl\Repositories\Eloquent\DatabaseRepository $repository
-     * @param \Pterodactyl\Services\Databases\DeployServerDatabaseService $deployDatabaseService
      */
     public function __construct(
         DatabaseManagementService $managementService,
@@ -62,10 +58,6 @@ class DatabaseController extends ClientApiController
 
     /**
      * Return all of the databases that belong to the given server.
-     *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Databases\GetDatabasesRequest $request
-     * @param \Pterodactyl\Models\Server $server
-     * @return array
      */
     public function index(GetDatabasesRequest $request, Server $server): array
     {
@@ -77,10 +69,6 @@ class DatabaseController extends ClientApiController
     /**
      * Create a new database for the given server and return it.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Databases\StoreDatabaseRequest $request
-     * @param \Pterodactyl\Models\Server $server
-     * @return array
-     *
      * @throws \Throwable
      * @throws \Pterodactyl\Exceptions\Service\Database\TooManyDatabasesException
      * @throws \Pterodactyl\Exceptions\Service\Database\DatabaseClientFeatureNotEnabledException
@@ -88,6 +76,11 @@ class DatabaseController extends ClientApiController
     public function store(StoreDatabaseRequest $request, Server $server): array
     {
         $database = $this->deployDatabaseService->handle($server, $request->validated());
+
+        Activity::event('server:database.create')
+            ->subject($database)
+            ->property('name', $database->database)
+            ->log();
 
         return $this->fractal->item($database)
             ->parseIncludes(['password'])
@@ -99,9 +92,6 @@ class DatabaseController extends ClientApiController
      * Rotates the password for the given server model and returns a fresh instance to
      * the caller.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Databases\RotatePasswordRequest $request
-     * @param \Pterodactyl\Models\Server $server
-     * @param \Pterodactyl\Models\Database $database
      * @return array
      *
      * @throws \Throwable
@@ -110,6 +100,11 @@ class DatabaseController extends ClientApiController
     {
         $this->passwordService->handle($database);
         $database->refresh();
+
+        Activity::event('server:database.rotate-password')
+            ->subject($database)
+            ->property('name', $database->database)
+            ->log();
 
         return $this->fractal->item($database)
             ->parseIncludes(['password'])
@@ -120,16 +115,16 @@ class DatabaseController extends ClientApiController
     /**
      * Removes a database from the server.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Client\Servers\Databases\DeleteDatabaseRequest $request
-     * @param \Pterodactyl\Models\Server $server
-     * @param \Pterodactyl\Models\Database $database
-     * @return \Illuminate\Http\Response
-     *
      * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
      */
     public function delete(DeleteDatabaseRequest $request, Server $server, Database $database): Response
     {
         $this->managementService->delete($database);
+
+        Activity::event('server:database.delete')
+            ->subject($database)
+            ->property('name', $database->database)
+            ->log();
 
         return Response::create('', Response::HTTP_NO_CONTENT);
     }

@@ -3,20 +3,26 @@
 namespace Pterodactyl\Models;
 
 use Pterodactyl\Rules\Username;
+use Pterodactyl\Facades\Activity;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rules\In;
 use Illuminate\Auth\Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Builder;
+use Pterodactyl\Models\Traits\HasAccessTokens;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Pterodactyl\Traits\Helpers\AvailableLanguages;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\Access\Authorizable;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Contracts\Auth\Access\Authorizable as AuthorizableContract;
 use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Pterodactyl\Notifications\SendPasswordReset as ResetPasswordNotification;
 
 /**
+ * Pterodactyl\Models\User.
+ *
  * @property int $id
  * @property string|null $external_id
  * @property string $uuid
@@ -25,20 +31,51 @@ use Pterodactyl\Notifications\SendPasswordReset as ResetPasswordNotification;
  * @property string|null $name_first
  * @property string|null $name_last
  * @property string $password
- * @property string|null $remeber_token
+ * @property string|null $remember_token
  * @property string $language
  * @property bool $root_admin
  * @property bool $use_totp
  * @property string|null $totp_secret
- * @property \Carbon\Carbon|null $totp_authenticated_at
+ * @property \Illuminate\Support\Carbon|null $totp_authenticated_at
  * @property bool $gravatar
- * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
- *
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\ApiKey[] $apiKeys
+ * @property int|null $api_keys_count
  * @property string $name
- * @property \Pterodactyl\Models\ApiKey[]|\Illuminate\Database\Eloquent\Collection $apiKeys
- * @property \Pterodactyl\Models\Server[]|\Illuminate\Database\Eloquent\Collection $servers
- * @property \Pterodactyl\Models\RecoveryToken[]|\Illuminate\Database\Eloquent\Collection $recoveryTokens
+ * @property \Illuminate\Notifications\DatabaseNotificationCollection|\Illuminate\Notifications\DatabaseNotification[] $notifications
+ * @property int|null $notifications_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\RecoveryToken[] $recoveryTokens
+ * @property int|null $recovery_tokens_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Server[] $servers
+ * @property int|null $servers_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\UserSSHKey[] $sshKeys
+ * @property int|null $ssh_keys_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\ApiKey[] $tokens
+ * @property int|null $tokens_count
+ *
+ * @method static \Database\Factories\UserFactory factory(...$parameters)
+ * @method static Builder|User newModelQuery()
+ * @method static Builder|User newQuery()
+ * @method static Builder|User query()
+ * @method static Builder|User whereCreatedAt($value)
+ * @method static Builder|User whereEmail($value)
+ * @method static Builder|User whereExternalId($value)
+ * @method static Builder|User whereGravatar($value)
+ * @method static Builder|User whereId($value)
+ * @method static Builder|User whereLanguage($value)
+ * @method static Builder|User whereNameFirst($value)
+ * @method static Builder|User whereNameLast($value)
+ * @method static Builder|User wherePassword($value)
+ * @method static Builder|User whereRememberToken($value)
+ * @method static Builder|User whereRootAdmin($value)
+ * @method static Builder|User whereTotpAuthenticatedAt($value)
+ * @method static Builder|User whereTotpSecret($value)
+ * @method static Builder|User whereUpdatedAt($value)
+ * @method static Builder|User whereUseTotp($value)
+ * @method static Builder|User whereUsername($value)
+ * @method static Builder|User whereUuid($value)
+ * @mixin \Eloquent
  */
 class User extends Model implements
     AuthenticatableContract,
@@ -49,16 +86,17 @@ class User extends Model implements
     use Authorizable;
     use AvailableLanguages;
     use CanResetPassword;
+    use HasAccessTokens;
     use Notifiable;
 
-    const USER_LEVEL_USER = 0;
-    const USER_LEVEL_ADMIN = 1;
+    public const USER_LEVEL_USER = 0;
+    public const USER_LEVEL_ADMIN = 1;
 
     /**
      * The resource name for this model when it is transformed into an
      * API representation using fractal.
      */
-    const RESOURCE_NAME = 'user';
+    public const RESOURCE_NAME = 'user';
 
     /**
      * Level of servers to display when using access() on a user.
@@ -157,20 +195,18 @@ class User extends Model implements
     {
         $rules = parent::getRules();
 
-        $rules['language'][] = new In(array_keys((new self)->getAvailableLanguages()));
-        $rules['username'][] = new Username;
+        $rules['language'][] = new In(array_keys((new self())->getAvailableLanguages()));
+        $rules['username'][] = new Username();
 
         return $rules;
     }
 
     /**
      * Return the user model in a format that can be passed over to Vue templates.
-     *
-     * @return array
      */
     public function toVueObject(): array
     {
-        return (new Collection($this->toArray()))->except(['id', 'external_id'])->toArray();
+        return Collection::make($this->toArray())->except(['id', 'external_id'])->toArray();
     }
 
     /**
@@ -180,13 +216,16 @@ class User extends Model implements
      */
     public function sendPasswordResetNotification($token)
     {
+        Activity::event('auth:reset-password')
+            ->withRequestMetadata()
+            ->subject($this)
+            ->log('sending password reset email');
+
         $this->notify(new ResetPasswordNotification($token));
     }
 
     /**
      * Store the username as a lowercase string.
-     *
-     * @param string $value
      */
     public function setUsernameAttribute(string $value)
     {
@@ -228,6 +267,20 @@ class User extends Model implements
     public function recoveryTokens()
     {
         return $this->hasMany(RecoveryToken::class);
+    }
+
+    public function sshKeys(): HasMany
+    {
+        return $this->hasMany(UserSSHKey::class);
+    }
+
+    /**
+     * Returns all of the activity logs where this user is the subject — not to
+     * be confused by activity logs where this user is the _actor_.
+     */
+    public function activity(): MorphToMany
+    {
+        return $this->morphToMany(ActivityLog::class, 'subject', 'activity_log_subjects');
     }
 
     /**

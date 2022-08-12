@@ -11,17 +11,13 @@ class NestTransformer extends BaseTransformer
 {
     /**
      * Relationships that can be loaded onto this transformation.
-     *
-     * @var array
      */
-    protected $availableIncludes = [
+    protected array $availableIncludes = [
         'eggs', 'servers',
     ];
 
     /**
      * Return the resource name for the JSONAPI output.
-     *
-     * @return string
      */
     public function getResourceName(): string
     {
@@ -32,7 +28,6 @@ class NestTransformer extends BaseTransformer
      * Transform a Nest model into a representation that can be consumed by the
      * application API.
      *
-     * @param \Pterodactyl\Models\Nest $model
      * @return array
      */
     public function transform(Nest $model)
@@ -48,14 +43,13 @@ class NestTransformer extends BaseTransformer
     /**
      * Include the Eggs relationship on the given Nest model transformation.
      *
-     * @param \Pterodactyl\Models\Nest $model
      * @return \League\Fractal\Resource\Collection|\League\Fractal\Resource\NullResource
      *
      * @throws \Pterodactyl\Exceptions\Transformer\InvalidTransformerLevelException
      */
     public function includeEggs(Nest $model)
     {
-        if (! $this->authorize(AdminAcl::RESOURCE_EGGS)) {
+        if (!$this->authorize(AdminAcl::RESOURCE_EGGS)) {
             return $this->null();
         }
 
@@ -67,14 +61,13 @@ class NestTransformer extends BaseTransformer
     /**
      * Include the servers relationship on the given Nest model.
      *
-     * @param \Pterodactyl\Models\Nest $model
      * @return \League\Fractal\Resource\Collection|\League\Fractal\Resource\NullResource
      *
      * @throws \Pterodactyl\Exceptions\Transformer\InvalidTransformerLevelException
      */
     public function includeServers(Nest $model)
     {
-        if (! $this->authorize(AdminAcl::RESOURCE_SERVERS)) {
+        if (!$this->authorize(AdminAcl::RESOURCE_SERVERS)) {
             return $this->null();
         }
 

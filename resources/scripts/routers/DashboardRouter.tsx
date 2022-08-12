@@ -1,37 +1,49 @@
-import React, { useEffect } from 'react';
-import ReactGA from 'react-ga';
-import { NavLink, Route, RouteComponentProps, Switch } from 'react-router-dom';
-import AccountOverviewContainer from '@/components/dashboard/AccountOverviewContainer';
+import React from 'react';
+import { NavLink, Route, Switch } from 'react-router-dom';
 import NavigationBar from '@/components/NavigationBar';
 import DashboardContainer from '@/components/dashboard/DashboardContainer';
-import AccountApiContainer from '@/components/dashboard/AccountApiContainer';
-import NotFound from '@/components/screens/NotFound';
+import { NotFound } from '@/components/elements/ScreenBlock';
 import TransitionRouter from '@/TransitionRouter';
 import SubNavigation from '@/components/elements/SubNavigation';
+import { useLocation } from 'react-router';
+import Spinner from '@/components/elements/Spinner';
+import routes from '@/routers/routes';
 
-export default ({ location }: RouteComponentProps) => {
-    useEffect(() => {
-        ReactGA.pageview(location.pathname);
-    }, [ location.pathname ]);
+export default () => {
+    const location = useLocation();
 
     return (
         <>
             <NavigationBar />
-            {location.pathname.startsWith('/account') &&
+            {location.pathname.startsWith('/account') && (
                 <SubNavigation>
                     <div>
-                        <NavLink to={'/account'} exact>Settings</NavLink>
-                        <NavLink to={'/account/api'}>API Credentials</NavLink>
+                        {routes.account
+                            .filter((route) => !!route.name)
+                            .map(({ path, name, exact = false }) => (
+                                <NavLink key={path} to={`/account/${path}`.replace('//', '/')} exact={exact}>
+                                    {name}
+                                </NavLink>
+                            ))}
                     </div>
                 </SubNavigation>
-            }
+            )}
             <TransitionRouter>
-                <Switch location={location}>
-                    <Route path={'/'} component={DashboardContainer} exact />
-                    <Route path={'/account'} component={AccountOverviewContainer} exact/>
-                    <Route path={'/account/api'} component={AccountApiContainer} exact/>
-                    <Route path={'*'} component={NotFound} />
-                </Switch>
+                <React.Suspense fallback={<Spinner centered />}>
+                    <Switch location={location}>
+                        <Route path={'/'} exact>
+                            <DashboardContainer />
+                        </Route>
+                        {routes.account.map(({ path, component: Component }) => (
+                            <Route key={path} path={`/account/${path}`.replace('//', '/')} exact>
+                                <Component />
+                            </Route>
+                        ))}
+                        <Route path={'*'}>
+                            <NotFound />
+                        </Route>
+                    </Switch>
+                </React.Suspense>
             </TransitionRouter>
         </>
     );

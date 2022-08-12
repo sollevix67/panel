@@ -8,13 +8,14 @@ use Psr\Log\LoggerInterface;
 use Illuminate\Http\Response;
 use Illuminate\Container\Container;
 use Prologue\Alerts\AlertsMessageBag;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
-class DisplayException extends PterodactylException
+class DisplayException extends PterodactylException implements HttpExceptionInterface
 {
-    const LEVEL_DEBUG = 'debug';
-    const LEVEL_INFO = 'info';
-    const LEVEL_WARNING = 'warning';
-    const LEVEL_ERROR = 'error';
+    public const LEVEL_DEBUG = 'debug';
+    public const LEVEL_INFO = 'info';
+    public const LEVEL_WARNING = 'warning';
+    public const LEVEL_ERROR = 'error';
 
     /**
      * @var string
@@ -25,7 +26,6 @@ class DisplayException extends PterodactylException
      * Exception constructor.
      *
      * @param string $message
-     * @param Throwable|null $previous
      * @param string $level
      * @param int $code
      */
@@ -53,22 +53,29 @@ class DisplayException extends PterodactylException
     }
 
     /**
+     * @return array
+     */
+    public function getHeaders()
+    {
+        return [];
+    }
+
+    /**
      * Render the exception to the user by adding a flashed message to the session
      * and then redirecting them back to the page that they came from. If the
      * request originated from an API hit, return the error in JSONAPI spec format.
      *
      * @param \Illuminate\Http\Request $request
+     *
      * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
      */
     public function render($request)
     {
         if ($request->expectsJson()) {
-            return response()->json(Handler::convertToArray($this, [
-                'detail' => $this->getMessage(),
-            ]), method_exists($this, 'getStatusCode') ? $this->getStatusCode() : Response::HTTP_BAD_REQUEST);
+            return response()->json(Handler::toArray($this), $this->getStatusCode(), $this->getHeaders());
         }
 
-        Container::getInstance()->make(AlertsMessageBag::class)->danger($this->getMessage())->flash();
+        app(AlertsMessageBag::class)->danger($this->getMessage())->flash();
 
         return redirect()->back()->withInput();
     }
@@ -83,7 +90,7 @@ class DisplayException extends PterodactylException
      */
     public function report()
     {
-        if (! $this->getPrevious() instanceof Exception || ! Handler::isReportable($this->getPrevious())) {
+        if (!$this->getPrevious() instanceof Exception || !Handler::isReportable($this->getPrevious())) {
             return null;
         }
 

@@ -7,6 +7,7 @@ use Illuminate\Http\Response;
 use Pterodactyl\Models\Location;
 use Pterodactyl\Transformers\Api\Application\NodeTransformer;
 use Pterodactyl\Transformers\Api\Application\ServerTransformer;
+use Pterodactyl\Transformers\Api\Application\LocationTransformer;
 use Pterodactyl\Tests\Integration\Api\Application\ApplicationApiIntegrationTestCase;
 
 class LocationControllerTest extends ApplicationApiIntegrationTestCase
@@ -16,9 +17,9 @@ class LocationControllerTest extends ApplicationApiIntegrationTestCase
      */
     public function testGetLocations()
     {
-        $locations = factory(Location::class)->times(2)->create();
+        $locations = Location::factory()->times(2)->create();
 
-        $response = $this->getJson('/api/application/locations');
+        $response = $this->getJson('/api/application/locations?per_page=60');
         $response->assertStatus(Response::HTTP_OK);
         $response->assertJsonCount(2, 'data');
         $response->assertJsonStructure([
@@ -38,7 +39,7 @@ class LocationControllerTest extends ApplicationApiIntegrationTestCase
                     'pagination' => [
                         'total' => 2,
                         'count' => 2,
-                        'per_page' => 100,
+                        'per_page' => 60,
                         'current_page' => 1,
                         'total_pages' => 1,
                     ],
@@ -70,7 +71,7 @@ class LocationControllerTest extends ApplicationApiIntegrationTestCase
      */
     public function testGetSingleLocation()
     {
-        $location = factory(Location::class)->create();
+        $location = Location::factory()->create();
 
         $response = $this->getJson('/api/application/locations/' . $location->id);
         $response->assertStatus(Response::HTTP_OK);
@@ -89,11 +90,82 @@ class LocationControllerTest extends ApplicationApiIntegrationTestCase
     }
 
     /**
+     * Test that a location can be created.
+     */
+    public function testCreateLocation()
+    {
+        $response = $this->postJson('/api/application/locations', [
+            'short' => 'inhouse',
+            'long' => 'This is my inhouse location',
+        ]);
+
+        $response->assertStatus(Response::HTTP_CREATED);
+        $response->assertJsonCount(3);
+        $response->assertJsonStructure([
+            'object',
+            'attributes' => ['id', 'short', 'long', 'created_at', 'updated_at'],
+            'meta' => ['resource'],
+        ]);
+
+        $this->assertDatabaseHas('locations', ['short' => 'inhouse', 'long' => 'This is my inhouse location']);
+
+        $location = Location::where('short', 'inhouse')->first();
+        $response->assertJson([
+            'object' => 'location',
+            'attributes' => $this->getTransformer(LocationTransformer::class)->transform($location),
+            'meta' => [
+                'resource' => route('api.application.locations.view', $location->id),
+            ],
+        ], true);
+    }
+
+    /**
+     * Test that a location can be updated.
+     */
+    public function testUpdateLocation()
+    {
+        $location = Location::factory()->create();
+
+        $response = $this->patchJson('/api/application/locations/' . $location->id, [
+            'short' => 'new inhouse',
+            'long' => 'This is my new inhouse location',
+        ]);
+        $response->assertStatus(Response::HTTP_OK);
+        $response->assertJsonCount(2);
+        $response->assertJsonStructure([
+            'object',
+            'attributes' => ['id', 'short', 'long', 'created_at', 'updated_at'],
+        ]);
+
+        $this->assertDatabaseHas('locations', ['short' => 'new inhouse', 'long' => 'This is my new inhouse location']);
+        $location = $location->fresh();
+
+        $response->assertJson([
+            'object' => 'location',
+            'attributes' => $this->getTransformer(LocationTransformer::class)->transform($location),
+        ]);
+    }
+
+    /**
+     * Test that a location can be deleted from the database.
+     */
+    public function testDeleteLocation()
+    {
+        $location = Location::factory()->create();
+        $this->assertDatabaseHas('locations', ['id' => $location->id]);
+
+        $response = $this->delete('/api/application/locations/' . $location->id);
+        $response->assertStatus(Response::HTTP_NO_CONTENT);
+
+        $this->assertDatabaseMissing('locations', ['id' => $location->id]);
+    }
+
+    /**
      * Test that all of the defined relationships for a location can be loaded successfully.
      */
     public function testRelationshipsCanBeLoaded()
     {
-        $location = factory(Location::class)->create();
+        $location = Location::factory()->create();
         $server = $this->createServerModel(['user_id' => $this->getApiUser()->id, 'location_id' => $location->id]);
 
         $response = $this->getJson('/api/application/locations/' . $location->id . '?include=servers,nodes');
@@ -143,8 +215,8 @@ class LocationControllerTest extends ApplicationApiIntegrationTestCase
     {
         $this->createNewDefaultApiKey($this->getApiUser(), ['r_nodes' => 0]);
 
-        $location = factory(Location::class)->create();
-        factory(Node::class)->create(['location_id' => $location->id]);
+        $location = Location::factory()->create();
+        Node::factory()->create(['location_id' => $location->id]);
 
         $response = $this->getJson('/api/application/locations/' . $location->id . '?include=nodes');
         $response->assertStatus(Response::HTTP_OK);
@@ -187,22 +259,10 @@ class LocationControllerTest extends ApplicationApiIntegrationTestCase
      */
     public function testErrorReturnedIfNoPermission()
     {
-        $location = factory(Location::class)->create();
+        $location = Location::factory()->create();
         $this->createNewDefaultApiKey($this->getApiUser(), ['r_locations' => 0]);
 
         $response = $this->getJson('/api/application/locations/' . $location->id);
-        $this->assertAccessDeniedJson($response);
-    }
-
-    /**
-     * Test that a location's existence is not exposed unless an API key has permission
-     * to access the resource.
-     */
-    public function testResourceIsNotExposedWithoutPermissions()
-    {
-        $this->createNewDefaultApiKey($this->getApiUser(), ['r_locations' => 0]);
-
-        $response = $this->getJson('/api/application/locations/nil');
         $this->assertAccessDeniedJson($response);
     }
 }

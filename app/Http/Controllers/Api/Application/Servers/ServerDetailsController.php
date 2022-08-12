@@ -24,9 +24,6 @@ class ServerDetailsController extends ApplicationApiController
 
     /**
      * ServerDetailsController constructor.
-     *
-     * @param \Pterodactyl\Services\Servers\BuildModificationService $buildModificationService
-     * @param \Pterodactyl\Services\Servers\DetailsModificationService $detailsModificationService
      */
     public function __construct(
         BuildModificationService $buildModificationService,
@@ -41,30 +38,24 @@ class ServerDetailsController extends ApplicationApiController
     /**
      * Update the details for a specific server.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Application\Servers\UpdateServerDetailsRequest $request
-     * @return array
-     *
      * @throws \Pterodactyl\Exceptions\DisplayException
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
      * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
      */
-    public function details(UpdateServerDetailsRequest $request): array
+    public function details(UpdateServerDetailsRequest $request, Server $server): array
     {
-        $server = $this->detailsModificationService->returnUpdatedModel()->handle(
-            $request->getModel(Server::class), $request->validated()
+        $updated = $this->detailsModificationService->returnUpdatedModel()->handle(
+            $server,
+            $request->validated()
         );
 
-        return $this->fractal->item($server)
+        return $this->fractal->item($updated)
             ->transformWith($this->getTransformer(ServerTransformer::class))
             ->toArray();
     }
 
     /**
      * Update the build details for a specific server.
-     *
-     * @param \Pterodactyl\Http\Requests\Api\Application\Servers\UpdateServerBuildConfigurationRequest $request
-     * @param \Pterodactyl\Models\Server $server
-     * @return array
      *
      * @throws \Pterodactyl\Exceptions\DisplayException
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException

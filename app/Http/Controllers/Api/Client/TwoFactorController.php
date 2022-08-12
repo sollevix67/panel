@@ -6,8 +6,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
+use Pterodactyl\Facades\Activity;
 use Illuminate\Contracts\Validation\Factory;
-use Illuminate\Validation\ValidationException;
 use Pterodactyl\Services\Users\TwoFactorSetupService;
 use Pterodactyl\Services\Users\ToggleTwoFactorService;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -31,10 +31,6 @@ class TwoFactorController extends ClientApiController
 
     /**
      * TwoFactorController constructor.
-     *
-     * @param \Pterodactyl\Services\Users\ToggleTwoFactorService $toggleTwoFactorService
-     * @param \Pterodactyl\Services\Users\TwoFactorSetupService $setupService
-     * @param \Illuminate\Contracts\Validation\Factory $validation
      */
     public function __construct(
         ToggleTwoFactorService $toggleTwoFactorService,
@@ -53,7 +49,6 @@ class TwoFactorController extends ClientApiController
      * it on their account. If two-factor is already enabled this endpoint
      * will return a 400 error.
      *
-     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
@@ -66,37 +61,33 @@ class TwoFactorController extends ClientApiController
         }
 
         return new JsonResponse([
-            'data' => [
-                'image_url_data' => $this->setupService->handle($request->user()),
-            ],
+            'data' => $this->setupService->handle($request->user()),
         ]);
     }
 
     /**
      * Updates a user's account to have two-factor enabled.
      *
-     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      *
+     * @throws \Throwable
      * @throws \Illuminate\Validation\ValidationException
-     * @throws \PragmaRX\Google2FA\Exceptions\IncompatibleWithGoogleAuthenticatorException
-     * @throws \PragmaRX\Google2FA\Exceptions\InvalidCharactersException
-     * @throws \PragmaRX\Google2FA\Exceptions\SecretKeyTooShortException
-     * @throws \Pterodactyl\Exceptions\Model\DataValidationException
-     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
-     * @throws \Pterodactyl\Exceptions\Service\User\TwoFactorAuthenticationTokenInvalid
      */
     public function store(Request $request)
     {
         $validator = $this->validation->make($request->all(), [
-            'code' => 'required|string',
+            'code' => ['required', 'string', 'size:6'],
+            'password' => ['required', 'string'],
         ]);
 
-        if ($validator->fails()) {
-            throw new ValidationException($validator);
+        $data = $validator->validate();
+        if (!password_verify($data['password'], $request->user()->password)) {
+            throw new BadRequestHttpException('The password provided was not valid.');
         }
 
-        $tokens = $this->toggleTwoFactorService->handle($request->user(), $request->input('code'), true);
+        $tokens = $this->toggleTwoFactorService->handle($request->user(), $data['code'], true);
+
+        Activity::event('user:two-factor.create')->log();
 
         return new JsonResponse([
             'object' => 'recovery_tokens',
@@ -110,15 +101,13 @@ class TwoFactorController extends ClientApiController
      * Disables two-factor authentication on an account if the password provided
      * is valid.
      *
-     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
+     * @throws \Throwable
      */
     public function delete(Request $request)
     {
-        if (! password_verify($request->input('password') ?? '', $request->user()->password)) {
-            throw new BadRequestHttpException(
-                'The password provided was not valid.'
-            );
+        if (!password_verify($request->input('password') ?? '', $request->user()->password)) {
+            throw new BadRequestHttpException('The password provided was not valid.');
         }
 
         /** @var \Pterodactyl\Models\User $user */
@@ -128,6 +117,8 @@ class TwoFactorController extends ClientApiController
             'totp_authenticated_at' => Carbon::now(),
             'use_totp' => false,
         ]);
+
+        Activity::event('user:two-factor.delete')->log();
 
         return new JsonResponse([], Response::HTTP_NO_CONTENT);
     }

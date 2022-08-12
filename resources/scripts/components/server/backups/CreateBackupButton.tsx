@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal, { RequiredModalProps } from '@/components/elements/Modal';
 import { Field as FormikField, Form, Formik, FormikHelpers, useFormikContext } from 'formik';
-import { object, string } from 'yup';
+import { boolean, object, string } from 'yup';
 import Field from '@/components/elements/Field';
 import FormikFieldWrapper from '@/components/elements/FormikFieldWrapper';
 import useFlash from '@/plugins/useFlash';
@@ -12,10 +12,13 @@ import tw from 'twin.macro';
 import { Textarea } from '@/components/elements/Input';
 import getServerBackups from '@/api/swr/getServerBackups';
 import { ServerContext } from '@/state/server';
+import FormikSwitch from '@/components/elements/FormikSwitch';
+import Can from '@/components/elements/Can';
 
 interface Values {
     name: string;
     ignored: string;
+    isLocked: boolean;
 }
 
 const ModalContent = ({ ...props }: RequiredModalProps) => {
@@ -24,16 +27,14 @@ const ModalContent = ({ ...props }: RequiredModalProps) => {
     return (
         <Modal {...props} showSpinnerOverlay={isSubmitting}>
             <Form>
-                <FlashMessageRender byKey={'backups:create'} css={tw`mb-4`}/>
+                <FlashMessageRender byKey={'backups:create'} css={tw`mb-4`} />
                 <h2 css={tw`text-2xl mb-6`}>Create server backup</h2>
-                <div css={tw`mb-6`}>
-                    <Field
-                        name={'name'}
-                        label={'Backup name'}
-                        description={'If provided, the name that should be used to reference this backup.'}
-                    />
-                </div>
-                <div css={tw`mb-6`}>
+                <Field
+                    name={'name'}
+                    label={'Backup name'}
+                    description={'If provided, the name that should be used to reference this backup.'}
+                />
+                <div css={tw`mt-6`}>
                     <FormikFieldWrapper
                         name={'ignored'}
                         label={'Ignored Files & Directories'}
@@ -44,10 +45,19 @@ const ModalContent = ({ ...props }: RequiredModalProps) => {
                             prefixing the path with an exclamation point.
                         `}
                     >
-                        <FormikField as={Textarea} name={'ignored'} rows={6}/>
+                        <FormikField as={Textarea} name={'ignored'} rows={6} />
                     </FormikFieldWrapper>
                 </div>
-                <div css={tw`flex justify-end`}>
+                <Can action={'backup.delete'}>
+                    <div css={tw`mt-6 bg-neutral-700 border border-neutral-800 shadow-inner p-4 rounded`}>
+                        <FormikSwitch
+                            name={'isLocked'}
+                            label={'Locked'}
+                            description={'Prevents this backup from being deleted until explicitly unlocked.'}
+                        />
+                    </div>
+                </Can>
+                <div css={tw`flex justify-end mt-6`}>
                     <Button type={'submit'} disabled={isSubmitting}>
                         Start backup
                     </Button>
@@ -58,23 +68,26 @@ const ModalContent = ({ ...props }: RequiredModalProps) => {
 };
 
 export default () => {
-    const uuid = ServerContext.useStoreState(state => state.server.data!.uuid);
+    const uuid = ServerContext.useStoreState((state) => state.server.data!.uuid);
     const { clearFlashes, clearAndAddHttpError } = useFlash();
-    const [ visible, setVisible ] = useState(false);
+    const [visible, setVisible] = useState(false);
     const { mutate } = getServerBackups();
 
     useEffect(() => {
         clearFlashes('backups:create');
-    }, [ visible ]);
+    }, [visible]);
 
-    const submit = ({ name, ignored }: Values, { setSubmitting }: FormikHelpers<Values>) => {
+    const submit = (values: Values, { setSubmitting }: FormikHelpers<Values>) => {
         clearFlashes('backups:create');
-        createServerBackup(uuid, name, ignored)
-            .then(backup => {
-                mutate(data => ({ ...data, items: data.items.concat(backup) }), false);
+        createServerBackup(uuid, values)
+            .then((backup) => {
+                mutate(
+                    (data) => ({ ...data, items: data.items.concat(backup), backupCount: data.backupCount + 1 }),
+                    false
+                );
                 setVisible(false);
             })
-            .catch(error => {
+            .catch((error) => {
                 clearAndAddHttpError({ key: 'backups:create', error });
                 setSubmitting(false);
             });
@@ -82,18 +95,19 @@ export default () => {
 
     return (
         <>
-            {visible &&
-            <Formik
-                onSubmit={submit}
-                initialValues={{ name: '', ignored: '' }}
-                validationSchema={object().shape({
-                    name: string().max(191),
-                    ignored: string(),
-                })}
-            >
-                <ModalContent appear visible={visible} onDismissed={() => setVisible(false)}/>
-            </Formik>
-            }
+            {visible && (
+                <Formik
+                    onSubmit={submit}
+                    initialValues={{ name: '', ignored: '', isLocked: false }}
+                    validationSchema={object().shape({
+                        name: string().max(191),
+                        ignored: string(),
+                        isLocked: boolean(),
+                    })}
+                >
+                    <ModalContent appear visible={visible} onDismissed={() => setVisible(false)} />
+                </Formik>
+            )}
             <Button css={tw`w-full sm:w-auto`} onClick={() => setVisible(true)}>
                 Create backup
             </Button>

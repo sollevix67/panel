@@ -1,189 +1,128 @@
+import TransferListener from '@/components/server/TransferListener';
 import React, { useEffect, useState } from 'react';
-import ReactGA from 'react-ga';
-import { NavLink, Route, RouteComponentProps, Switch } from 'react-router-dom';
+import { NavLink, Route, Switch, useRouteMatch } from 'react-router-dom';
 import NavigationBar from '@/components/NavigationBar';
-import ServerConsole from '@/components/server/ServerConsole';
 import TransitionRouter from '@/TransitionRouter';
 import WebsocketHandler from '@/components/server/WebsocketHandler';
 import { ServerContext } from '@/state/server';
-import DatabasesContainer from '@/components/server/databases/DatabasesContainer';
-import FileManagerContainer from '@/components/server/files/FileManagerContainer';
 import { CSSTransition } from 'react-transition-group';
-import SuspenseSpinner from '@/components/elements/SuspenseSpinner';
-import FileEditContainer from '@/components/server/files/FileEditContainer';
-import SettingsContainer from '@/components/server/settings/SettingsContainer';
-import ScheduleContainer from '@/components/server/schedules/ScheduleContainer';
-import ScheduleEditContainer from '@/components/server/schedules/ScheduleEditContainer';
-import UsersContainer from '@/components/server/users/UsersContainer';
 import Can from '@/components/elements/Can';
-import BackupContainer from '@/components/server/backups/BackupContainer';
 import Spinner from '@/components/elements/Spinner';
-import ServerError from '@/components/screens/ServerError';
+import { NotFound, ServerError } from '@/components/elements/ScreenBlock';
 import { httpErrorToHuman } from '@/api/http';
-import NotFound from '@/components/screens/NotFound';
 import { useStoreState } from 'easy-peasy';
-import ScreenBlock from '@/components/screens/ScreenBlock';
 import SubNavigation from '@/components/elements/SubNavigation';
-import NetworkContainer from '@/components/server/network/NetworkContainer';
 import InstallListener from '@/components/server/InstallListener';
-import StartupContainer from '@/components/server/startup/StartupContainer';
-import requireServerPermission from '@/hoc/requireServerPermission';
 import ErrorBoundary from '@/components/elements/ErrorBoundary';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faExternalLinkAlt } from '@fortawesome/free-solid-svg-icons';
+import { useLocation } from 'react-router';
+import ConflictStateRenderer from '@/components/server/ConflictStateRenderer';
+import PermissionRoute from '@/components/elements/PermissionRoute';
+import routes from '@/routers/routes';
 
-const ServerRouter = ({ match, location }: RouteComponentProps<{ id: string }>) => {
-    const rootAdmin = useStoreState(state => state.user.data!.rootAdmin);
-    const [ error, setError ] = useState('');
-    const [ installing, setInstalling ] = useState(false);
+export default () => {
+    const match = useRouteMatch<{ id: string }>();
+    const location = useLocation();
 
-    const id = ServerContext.useStoreState(state => state.server.data?.id);
-    const uuid = ServerContext.useStoreState(state => state.server.data?.uuid);
-    const isInstalling = ServerContext.useStoreState(state => state.server.data?.isInstalling);
-    const getServer = ServerContext.useStoreActions(actions => actions.server.getServer);
-    const clearServerState = ServerContext.useStoreActions(actions => actions.clearServerState);
+    const rootAdmin = useStoreState((state) => state.user.data!.rootAdmin);
+    const [error, setError] = useState('');
 
-    useEffect(() => () => {
-        clearServerState();
-    }, []);
+    const id = ServerContext.useStoreState((state) => state.server.data?.id);
+    const uuid = ServerContext.useStoreState((state) => state.server.data?.uuid);
+    const inConflictState = ServerContext.useStoreState((state) => state.server.inConflictState);
+    const serverId = ServerContext.useStoreState((state) => state.server.data?.internalId);
+    const getServer = ServerContext.useStoreActions((actions) => actions.server.getServer);
+    const clearServerState = ServerContext.useStoreActions((actions) => actions.clearServerState);
 
-    useEffect(() => {
-        setInstalling(!!isInstalling);
-    }, [ isInstalling ]);
+    const to = (value: string, url = false) => {
+        if (value === '/') {
+            return url ? match.url : match.path;
+        }
+        return `${(url ? match.url : match.path).replace(/\/*$/, '')}/${value.replace(/^\/+/, '')}`;
+    };
+
+    useEffect(
+        () => () => {
+            clearServerState();
+        },
+        []
+    );
 
     useEffect(() => {
         setError('');
-        setInstalling(false);
-        getServer(match.params.id)
-            .catch(error => {
-                if (error.response?.status === 409) {
-                    setInstalling(true);
-                } else {
-                    console.error(error);
-                    setError(httpErrorToHuman(error));
-                }
-            });
+
+        getServer(match.params.id).catch((error) => {
+            console.error(error);
+            setError(httpErrorToHuman(error));
+        });
 
         return () => {
             clearServerState();
         };
-    }, [ match.params.id ]);
-
-    useEffect(() => {
-        ReactGA.pageview(location.pathname);
-    }, [ location.pathname ]);
+    }, [match.params.id]);
 
     return (
         <React.Fragment key={'server-router'}>
-            <NavigationBar/>
-            {(!uuid || !id) ?
-                error ?
-                    <ServerError message={error}/>
-                    :
-                    <Spinner size={'large'} centered/>
-                :
+            <NavigationBar />
+            {!uuid || !id ? (
+                error ? (
+                    <ServerError message={error} />
+                ) : (
+                    <Spinner size={'large'} centered />
+                )
+            ) : (
                 <>
                     <CSSTransition timeout={150} classNames={'fade'} appear in>
                         <SubNavigation>
                             <div>
-                                <NavLink to={`${match.url}`} exact>Console</NavLink>
-                                <Can action={'file.*'}>
-                                    <NavLink to={`${match.url}/files`}>File Manager</NavLink>
-                                </Can>
-                                <Can action={'database.*'}>
-                                    <NavLink to={`${match.url}/databases`}>Databases</NavLink>
-                                </Can>
-                                <Can action={'schedule.*'}>
-                                    <NavLink to={`${match.url}/schedules`}>Schedules</NavLink>
-                                </Can>
-                                <Can action={'user.*'}>
-                                    <NavLink to={`${match.url}/users`}>Users</NavLink>
-                                </Can>
-                                <Can action={'backup.*'}>
-                                    <NavLink to={`${match.url}/backups`}>Backups</NavLink>
-                                </Can>
-                                <Can action={'allocations.*'}>
-                                    <NavLink to={`${match.url}/network`}>Network</NavLink>
-                                </Can>
-                                <Can action={'startup.*'}>
-                                    <NavLink to={`${match.url}/startup`}>Startup</NavLink>
-                                </Can>
-                                <Can action={[ 'settings.*', 'file.sftp' ]} matchAny>
-                                    <NavLink to={`${match.url}/settings`}>Settings</NavLink>
-                                </Can>
+                                {routes.server
+                                    .filter((route) => !!route.name)
+                                    .map((route) =>
+                                        route.permission ? (
+                                            <Can key={route.path} action={route.permission} matchAny>
+                                                <NavLink to={to(route.path, true)} exact={route.exact}>
+                                                    {route.name}
+                                                </NavLink>
+                                            </Can>
+                                        ) : (
+                                            <NavLink key={route.path} to={to(route.path, true)} exact={route.exact}>
+                                                {route.name}
+                                            </NavLink>
+                                        )
+                                    )}
+                                {rootAdmin && (
+                                    // eslint-disable-next-line react/jsx-no-target-blank
+                                    <a href={`/admin/servers/view/${serverId}`} target={'_blank'}>
+                                        <FontAwesomeIcon icon={faExternalLinkAlt} />
+                                    </a>
+                                )}
                             </div>
                         </SubNavigation>
                     </CSSTransition>
-                    <InstallListener/>
-                    <WebsocketHandler/>
-                    {(installing && (!rootAdmin || (rootAdmin && !location.pathname.endsWith(`/server/${id}`)))) ?
-                        <ScreenBlock
-                            title={'Your server is installing.'}
-                            image={'/assets/svgs/server_installing.svg'}
-                            message={'Please check back in a few minutes.'}
-                        />
-                        :
+                    <InstallListener />
+                    <TransferListener />
+                    <WebsocketHandler />
+                    {inConflictState && (!rootAdmin || (rootAdmin && !location.pathname.endsWith(`/server/${id}`))) ? (
+                        <ConflictStateRenderer />
+                    ) : (
                         <ErrorBoundary>
                             <TransitionRouter>
                                 <Switch location={location}>
-                                    <Route path={`${match.path}`} component={ServerConsole} exact/>
-                                    <Route
-                                        path={`${match.path}/files`}
-                                        component={requireServerPermission(FileManagerContainer, 'file.*')}
-                                        exact
-                                    />
-                                    <Route
-                                        path={`${match.path}/files/:action(edit|new)`}
-                                        render={props => (
-                                            <SuspenseSpinner>
-                                                <FileEditContainer {...props as any}/>
-                                            </SuspenseSpinner>
-                                        )}
-                                        exact
-                                    />
-                                    <Route
-                                        path={`${match.path}/databases`}
-                                        component={requireServerPermission(DatabasesContainer, 'database.*')}
-                                        exact
-                                    />
-                                    <Route
-                                        path={`${match.path}/schedules`}
-                                        component={requireServerPermission(ScheduleContainer, 'schedule.*')}
-                                        exact
-                                    />
-                                    <Route
-                                        path={`${match.path}/schedules/:id`}
-                                        component={ScheduleEditContainer}
-                                        exact
-                                    />
-                                    <Route
-                                        path={`${match.path}/users`}
-                                        component={requireServerPermission(UsersContainer, 'user.*')}
-                                        exact
-                                    />
-                                    <Route
-                                        path={`${match.path}/backups`}
-                                        component={requireServerPermission(BackupContainer, 'backup.*')}
-                                        exact
-                                    />
-                                    <Route
-                                        path={`${match.path}/network`}
-                                        component={requireServerPermission(NetworkContainer, 'allocation.*')}
-                                        exact
-                                    />
-                                    <Route path={`${match.path}/startup`} component={StartupContainer} exact/>
-                                    <Route path={`${match.path}/settings`} component={SettingsContainer} exact/>
-                                    <Route path={'*'} component={NotFound}/>
+                                    {routes.server.map(({ path, permission, component: Component }) => (
+                                        <PermissionRoute key={path} permission={permission} path={to(path)} exact>
+                                            <Spinner.Suspense>
+                                                <Component />
+                                            </Spinner.Suspense>
+                                        </PermissionRoute>
+                                    ))}
+                                    <Route path={'*'} component={NotFound} />
                                 </Switch>
                             </TransitionRouter>
                         </ErrorBoundary>
-                    }
+                    )}
                 </>
-            }
+            )}
         </React.Fragment>
     );
 };
-
-export default (props: RouteComponentProps<any>) => (
-    <ServerContext.Provider>
-        <ServerRouter {...props}/>
-    </ServerContext.Provider>
-);

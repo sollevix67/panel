@@ -3,8 +3,6 @@
 namespace Pterodactyl\Http\Controllers\Api\Client;
 
 use Webmozart\Assert\Assert;
-use Illuminate\Container\Container;
-use Pterodactyl\Transformers\Daemon\BaseDaemonTransformer;
 use Pterodactyl\Transformers\Api\Client\BaseClientTransformer;
 use Pterodactyl\Http\Controllers\Api\Application\ApplicationApiController;
 
@@ -13,8 +11,6 @@ abstract class ClientApiController extends ApplicationApiController
     /**
      * Returns only the includes which are valid for the given transformer.
      *
-     * @param \Pterodactyl\Transformers\Api\Client\BaseClientTransformer $transformer
-     * @param array $merge
      * @return string[]
      */
     protected function getIncludesForTransformer(BaseClientTransformer $transformer, array $merge = [])
@@ -35,7 +31,7 @@ abstract class ClientApiController extends ApplicationApiController
     {
         $includes = $this->request->query('include') ?? [];
 
-        if (! is_string($includes)) {
+        if (!is_string($includes)) {
             return $includes;
         }
 
@@ -47,23 +43,19 @@ abstract class ClientApiController extends ApplicationApiController
     /**
      * Return an instance of an application transformer.
      *
-     * @param string $abstract
-     * @return \Pterodactyl\Transformers\Api\Client\BaseClientTransformer
+     * @template T of \Pterodactyl\Transformers\Api\Client\BaseClientTransformer
+     *
+     * @param class-string<T> $abstract
+     *
+     * @return T
+     *
+     * @noinspection PhpUndefinedClassInspection
+     * @noinspection PhpDocSignatureInspection
      */
     public function getTransformer(string $abstract)
     {
-        /** @var \Pterodactyl\Transformers\Api\Client\BaseClientTransformer $transformer */
-        $transformer = Container::getInstance()->make($abstract);
-        Assert::isInstanceOfAny($transformer, [
-            BaseClientTransformer::class,
-            BaseDaemonTransformer::class,
-        ]);
+        Assert::subclassOf($abstract, BaseClientTransformer::class);
 
-        if ($transformer instanceof BaseClientTransformer) {
-            $transformer->setKey($this->request->attributes->get('api_key'));
-            $transformer->setUser($this->request->user());
-        }
-
-        return $transformer;
+        return $abstract::fromRequest($this->request);
     }
 }

@@ -8,7 +8,6 @@ namespace Pterodactyl\Models;
  * @property string $long
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
- *
  * @property \Pterodactyl\Models\Node[] $nodes
  * @property \Pterodactyl\Models\Server[] $servers
  */
@@ -18,7 +17,7 @@ class Location extends Model
      * The resource name for this model when it is transformed into an
      * API representation using fractal.
      */
-    const RESOURCE_NAME = 'location';
+    public const RESOURCE_NAME = 'location';
 
     /**
      * The table associated with the model.
@@ -43,6 +42,14 @@ class Location extends Model
         'short' => 'required|string|between:1,60|unique:locations,short',
         'long' => 'string|nullable|between:1,191',
     ];
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getRouteKeyName(): string
+    {
+        return $this->getKeyName();
+    }
 
     /**
      * Gets the nodes in a specified location.

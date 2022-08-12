@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Pterodactyl - Panel
  * Copyright (c) 2015 - 2017 Dane Everitt <dane@daneeveritt.com>.
@@ -34,10 +35,6 @@ class UserDeletionService
 
     /**
      * DeletionService constructor.
-     *
-     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface $serverRepository
-     * @param \Illuminate\Contracts\Translation\Translator $translator
-     * @param \Pterodactyl\Contracts\Repository\UserRepositoryInterface $repository
      */
     public function __construct(
         ServerRepositoryInterface $serverRepository,
@@ -53,6 +50,7 @@ class UserDeletionService
      * Delete a user from the panel only if they have no servers attached to their account.
      *
      * @param int|\Pterodactyl\Models\User $user
+     *
      * @return bool|null
      *
      * @throws \Pterodactyl\Exceptions\DisplayException
@@ -65,7 +63,7 @@ class UserDeletionService
 
         $servers = $this->serverRepository->setColumns('id')->findCountWhere([['owner_id', '=', $user]]);
         if ($servers > 0) {
-            throw new DisplayException($this->translator->trans('admin/user.exceptions.user_has_servers'));
+            throw new DisplayException($this->translator->get('admin/user.exceptions.user_has_servers'));
         }
 
         return $this->repository->delete($user);

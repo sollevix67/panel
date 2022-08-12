@@ -18,8 +18,6 @@ class SystemInformationController extends Controller
 
     /**
      * SystemInformationController constructor.
-     *
-     * @param \Pterodactyl\Repositories\Wings\DaemonConfigurationRepository $repository
      */
     public function __construct(DaemonConfigurationRepository $repository)
     {
@@ -29,8 +27,6 @@ class SystemInformationController extends Controller
     /**
      * Returns system information from the Daemon.
      *
-     * @param \Illuminate\Http\Request $request
-     * @param \Pterodactyl\Models\Node $node
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
@@ -39,7 +35,7 @@ class SystemInformationController extends Controller
     {
         $data = $this->repository->setNode($node)->getSystemInformation();
 
-        return JsonResponse::create([
+        return new JsonResponse([
             'version' => $data['version'] ?? '',
             'system' => [
                 'type' => Str::title($data['os'] ?? 'Unknown'),

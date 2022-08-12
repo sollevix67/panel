@@ -3,124 +3,54 @@
 namespace Pterodactyl\Services\Eggs\Sharing;
 
 use Ramsey\Uuid\Uuid;
+use Illuminate\Support\Arr;
 use Pterodactyl\Models\Egg;
+use Pterodactyl\Models\Nest;
 use Illuminate\Http\UploadedFile;
+use Pterodactyl\Models\EggVariable;
 use Illuminate\Database\ConnectionInterface;
-use Pterodactyl\Contracts\Repository\EggRepositoryInterface;
-use Pterodactyl\Contracts\Repository\NestRepositoryInterface;
-use Pterodactyl\Exceptions\Service\Egg\BadJsonFormatException;
-use Pterodactyl\Exceptions\Service\InvalidFileUploadException;
-use Pterodactyl\Contracts\Repository\EggVariableRepositoryInterface;
+use Pterodactyl\Services\Eggs\EggParserService;
 
 class EggImporterService
 {
-    /**
-     * @var \Illuminate\Database\ConnectionInterface
-     */
-    protected $connection;
+    protected ConnectionInterface $connection;
 
-    /**
-     * @var \Pterodactyl\Contracts\Repository\EggVariableRepositoryInterface
-     */
-    protected $eggVariableRepository;
+    protected EggParserService $parser;
 
-    /**
-     * @var \Pterodactyl\Contracts\Repository\NestRepositoryInterface
-     */
-    protected $nestRepository;
-
-    /**
-     * @var \Pterodactyl\Contracts\Repository\EggRepositoryInterface
-     */
-    protected $repository;
-
-    /**
-     * EggImporterService constructor.
-     *
-     * @param \Illuminate\Database\ConnectionInterface $connection
-     * @param \Pterodactyl\Contracts\Repository\EggRepositoryInterface $repository
-     * @param \Pterodactyl\Contracts\Repository\EggVariableRepositoryInterface $eggVariableRepository
-     * @param \Pterodactyl\Contracts\Repository\NestRepositoryInterface $nestRepository
-     */
-    public function __construct(
-        ConnectionInterface $connection,
-        EggRepositoryInterface $repository,
-        EggVariableRepositoryInterface $eggVariableRepository,
-        NestRepositoryInterface $nestRepository
-    ) {
+    public function __construct(ConnectionInterface $connection, EggParserService $parser)
+    {
         $this->connection = $connection;
-        $this->eggVariableRepository = $eggVariableRepository;
-        $this->repository = $repository;
-        $this->nestRepository = $nestRepository;
+        $this->parser = $parser;
     }
 
     /**
      * Take an uploaded JSON file and parse it into a new egg.
      *
-     * @param \Illuminate\Http\UploadedFile $file
-     * @param int $nest
-     * @return \Pterodactyl\Models\Egg
-     *
-     * @throws \Pterodactyl\Exceptions\Model\DataValidationException
-     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
-     * @throws \Pterodactyl\Exceptions\Service\Egg\BadJsonFormatException
-     * @throws \Pterodactyl\Exceptions\Service\InvalidFileUploadException
+     * @throws \Pterodactyl\Exceptions\Service\InvalidFileUploadException|\Throwable
      */
     public function handle(UploadedFile $file, int $nest): Egg
     {
-        if ($file->getError() !== UPLOAD_ERR_OK || ! $file->isFile()) {
-            throw new InvalidFileUploadException(
-                sprintf(
-                    'The selected file ["%s"] was not in a valid format to import. (is_file: %s is_valid: %s err_code: %s err: %s)',
-                    $file->getFilename(),
-                    $file->isFile() ? 'true' : 'false',
-                    $file->isValid() ? 'true' : 'false',
-                    $file->getError(),
-                    $file->getErrorMessage()
-                )
-            );
-        }
+        $parsed = $this->parser->handle($file);
 
-        $parsed = json_decode($file->openFile()->fread($file->getSize()));
-        if (json_last_error() !== 0) {
-            throw new BadJsonFormatException(trans('exceptions.nest.importer.json_error', [
-                'error' => json_last_error_msg(),
-            ]));
-        }
+        /** @var \Pterodactyl\Models\Nest $nest */
+        $nest = Nest::query()->with('eggs', 'eggs.variables')->findOrFail($nest);
 
-        if (object_get($parsed, 'meta.version') !== 'PTDL_v1') {
-            throw new InvalidFileUploadException(trans('exceptions.nest.importer.invalid_json_provided'));
-        }
+        return $this->connection->transaction(function () use ($nest, $parsed) {
+            $egg = (new Egg())->forceFill([
+                'uuid' => Uuid::uuid4()->toString(),
+                'nest_id' => $nest->id,
+                'author' => Arr::get($parsed, 'author'),
+                'copy_script_from' => null,
+            ]);
 
-        $nest = $this->nestRepository->getWithEggs($nest);
-        $this->connection->beginTransaction();
+            $egg = $this->parser->fillFromParsed($egg, $parsed);
+            $egg->save();
 
-        $egg = $this->repository->create([
-            'uuid' => Uuid::uuid4()->toString(),
-            'nest_id' => $nest->id,
-            'author' => object_get($parsed, 'author'),
-            'name' => object_get($parsed, 'name'),
-            'description' => object_get($parsed, 'description'),
-            'docker_image' => object_get($parsed, 'image'),
-            'config_files' => object_get($parsed, 'config.files'),
-            'config_startup' => object_get($parsed, 'config.startup'),
-            'config_logs' => object_get($parsed, 'config.logs'),
-            'config_stop' => object_get($parsed, 'config.stop'),
-            'startup' => object_get($parsed, 'startup'),
-            'script_install' => object_get($parsed, 'scripts.installation.script'),
-            'script_entry' => object_get($parsed, 'scripts.installation.entrypoint'),
-            'script_container' => object_get($parsed, 'scripts.installation.container'),
-            'copy_script_from' => null,
-        ], true, true);
+            foreach ($parsed['variables'] ?? [] as $variable) {
+                EggVariable::query()->forceCreate(array_merge($variable, ['egg_id' => $egg->id]));
+            }
 
-        collect($parsed->variables)->each(function ($variable) use ($egg) {
-            $this->eggVariableRepository->create(array_merge((array) $variable, [
-                'egg_id' => $egg->id,
-            ]));
+            return $egg;
         });
-
-        $this->connection->commit();
-
-        return $egg;
     }
 }

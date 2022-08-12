@@ -4,6 +4,7 @@ namespace Pterodactyl\Repositories\Wings;
 
 use Webmozart\Assert\Assert;
 use Pterodactyl\Models\Server;
+use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\TransferException;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 
@@ -32,39 +33,36 @@ class DaemonServerRepository extends DaemonRepository
     /**
      * Creates a new server on the Wings daemon.
      *
-     * @param array $data
-     *
      * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
      */
-    public function create(array $data): void
+    public function create(bool $startOnCompletion = true): void
     {
         Assert::isInstanceOf($this->server, Server::class);
 
         try {
-            $this->getHttpClient()->post(
-                '/api/servers', [
-                    'json' => $data,
-                ]
-            );
-        } catch (TransferException $exception) {
+            $this->getHttpClient()->post('/api/servers', [
+                'json' => [
+                    'uuid' => $this->server->uuid,
+                    'start_on_completion' => $startOnCompletion,
+                ],
+            ]);
+        } catch (GuzzleException $exception) {
             throw new DaemonConnectionException($exception);
         }
     }
 
     /**
-     * Updates details about a server on the Daemon.
-     *
-     * @param array $data
+     * Triggers a server sync on Wings.
      *
      * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
      */
-    public function update(array $data): void
+    public function sync(): void
     {
         Assert::isInstanceOf($this->server, Server::class);
 
         try {
-            $this->getHttpClient()->patch('/api/servers/' . $this->server->uuid, ['json' => $data]);
-        } catch (TransferException $exception) {
+            $this->getHttpClient()->post("/api/servers/{$this->server->uuid}/sync");
+        } catch (GuzzleException $exception) {
             throw new DaemonConnectionException($exception);
         }
     }
@@ -96,7 +94,8 @@ class DaemonServerRepository extends DaemonRepository
 
         try {
             $this->getHttpClient()->post(sprintf(
-                '/api/servers/%s/reinstall', $this->server->uuid
+                '/api/servers/%s/reinstall',
+                $this->server->uuid
             ));
         } catch (TransferException $exception) {
             throw new DaemonConnectionException($exception);
@@ -104,33 +103,10 @@ class DaemonServerRepository extends DaemonRepository
     }
 
     /**
-     * By default this function will suspend a server instance on the daemon. However, passing
-     * "true" as the first argument will unsuspend the server.
-     *
-     * @param bool $unsuspend
+     * Requests the daemon to create a full archive of the server. Once the daemon is finished
+     * they will send a POST request to "/api/remote/servers/{uuid}/archive" with a boolean.
      *
      * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
-     */
-    public function suspend(bool $unsuspend = false): void
-    {
-        Assert::isInstanceOf($this->server, Server::class);
-
-        try {
-            $this->getHttpClient()->patch(
-                '/api/servers/' . $this->server->uuid,
-                ['json' => ['suspended' => ! $unsuspend]]
-            );
-        } catch (TransferException $exception) {
-            throw new DaemonConnectionException($exception);
-        }
-    }
-
-    /**
-     * Requests the daemon to create a full archive of the server.
-     * Once the daemon is finished they will send a POST request to
-     * "/api/remote/servers/{uuid}/archive" with a boolean.
-     *
-     * @throws DaemonConnectionException
      */
     public function requestArchive(): void
     {
@@ -138,8 +114,43 @@ class DaemonServerRepository extends DaemonRepository
 
         try {
             $this->getHttpClient()->post(sprintf(
-                '/api/servers/%s/archive', $this->server->uuid
+                '/api/servers/%s/archive',
+                $this->server->uuid
             ));
+        } catch (TransferException $exception) {
+            throw new DaemonConnectionException($exception);
+        }
+    }
+
+    /**
+     * Revokes a single user's JTI by using their ID. This is simply a helper function to
+     * make it easier to revoke tokens on the fly. This ensures that the JTI key is formatted
+     * correctly and avoids any costly mistakes in the codebase.
+     *
+     * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
+     */
+    public function revokeUserJTI(int $id): void
+    {
+        Assert::isInstanceOf($this->server, Server::class);
+
+        $this->revokeJTIs([md5($id . $this->server->uuid)]);
+    }
+
+    /**
+     * Revokes an array of JWT JTI's by marking any token generated before the current time on
+     * the Wings instance as being invalid.
+     *
+     * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
+     */
+    protected function revokeJTIs(array $jtis): void
+    {
+        Assert::isInstanceOf($this->server, Server::class);
+
+        try {
+            $this->getHttpClient()
+                ->post(sprintf('/api/servers/%s/ws/deny', $this->server->uuid), [
+                    'json' => ['jtis' => $jtis],
+                ]);
         } catch (TransferException $exception) {
             throw new DaemonConnectionException($exception);
         }

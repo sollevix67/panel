@@ -4,8 +4,8 @@ namespace Pterodactyl\Http\Requests\Api\Application\Servers;
 
 use Pterodactyl\Models\Server;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 use Pterodactyl\Services\Acl\Api\AdminAcl;
-use Illuminate\Contracts\Validation\Validator;
 use Pterodactyl\Models\Objects\DeploymentObject;
 use Pterodactyl\Http\Requests\Api\Application\ApplicationApiRequest;
 
@@ -23,8 +23,6 @@ class StoreServerRequest extends ApplicationApiRequest
 
     /**
      * Rules to be applied to this request.
-     *
-     * @return array
      */
     public function rules(): array
     {
@@ -110,9 +108,9 @@ class StoreServerRequest extends ApplicationApiRequest
     /*
      * Run validation after the rules above have been applied.
      *
-     * @param \Illuminate\Contracts\Validation\Validator $validator
+     * @param \Illuminate\Validation\Validator $validator
      */
-    public function withValidator(Validator $validator)
+    public function withValidator(Validator $validator): void
     {
         $validator->sometimes('allocation.default', [
             'required', 'integer', 'bail',
@@ -120,7 +118,7 @@ class StoreServerRequest extends ApplicationApiRequest
                 $query->whereNull('server_id');
             }),
         ], function ($input) {
-            return ! ($input->deploy);
+            return !($input->deploy);
         });
 
         $validator->sometimes('allocation.additional.*', [
@@ -129,7 +127,7 @@ class StoreServerRequest extends ApplicationApiRequest
                 $query->whereNull('server_id');
             }),
         ], function ($input) {
-            return ! ($input->deploy);
+            return !($input->deploy);
         });
 
         $validator->sometimes('deploy.locations', 'present', function ($input) {
@@ -152,7 +150,7 @@ class StoreServerRequest extends ApplicationApiRequest
             return null;
         }
 
-        $object = new DeploymentObject;
+        $object = new DeploymentObject();
         $object->setDedicated($this->input('deploy.dedicated_ip', false));
         $object->setLocations($this->input('deploy.locations', []));
         $object->setPorts($this->input('deploy.port_range', []));

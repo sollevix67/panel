@@ -2,32 +2,23 @@
 
 namespace Pterodactyl\Transformers\Api\Application;
 
-use Cake\Chronos\Chronos;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
+use Webmozart\Assert\Assert;
 use Pterodactyl\Models\ApiKey;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use League\Fractal\TransformerAbstract;
 use Pterodactyl\Services\Acl\Api\AdminAcl;
-use Pterodactyl\Exceptions\Transformer\InvalidTransformerLevelException;
 
 /**
  * @method array transform(Model $model)
  */
 abstract class BaseTransformer extends TransformerAbstract
 {
-    const RESPONSE_TIMEZONE = 'UTC';
+    public const RESPONSE_TIMEZONE = 'UTC';
 
-    /**
-     * @var \Pterodactyl\Models\ApiKey
-     */
-    private $key;
-
-    /**
-     * Return the resource name for the JSONAPI output.
-     *
-     * @return string
-     */
-    abstract public function getResourceName(): string;
+    protected Request $request;
 
     /**
      * BaseTransformer constructor.
@@ -41,26 +32,30 @@ abstract class BaseTransformer extends TransformerAbstract
     }
 
     /**
-     * Set the HTTP request class being used for this request.
-     *
-     * @param \Pterodactyl\Models\ApiKey $key
-     * @return $this
+     * Return the resource name for the JSONAPI output.
      */
-    public function setKey(ApiKey $key)
+    abstract public function getResourceName(): string;
+
+    /**
+     * Sets the request on the instance.
+     *
+     * @return static
+     */
+    public function setRequest(Request $request): self
     {
-        $this->key = $key;
+        $this->request = $request;
 
         return $this;
     }
 
     /**
-     * Return the request instance being used for this transformer.
+     * Returns a new transformer instance with the request set on the instance.
      *
-     * @return \Pterodactyl\Models\ApiKey
+     * @return \Pterodactyl\Transformers\Api\Application\BaseTransformer
      */
-    public function getKey(): ApiKey
+    public static function fromRequest(Request $request)
     {
-        return $this->key;
+        return app(static::class)->setRequest($request);
     }
 
     /**
@@ -68,46 +63,55 @@ abstract class BaseTransformer extends TransformerAbstract
      * to access a different resource. This is used when including other
      * models on a transformation request.
      *
-     * @param string $resource
-     * @return bool
+     * @deprecated — prefer $user->can/cannot methods
      */
     protected function authorize(string $resource): bool
     {
-        return AdminAcl::check($this->getKey(), $resource, AdminAcl::READ);
+        $allowed = [ApiKey::TYPE_ACCOUNT, ApiKey::TYPE_APPLICATION];
+
+        $token = $this->request->user()->currentAccessToken();
+        if (!$token instanceof ApiKey || !in_array($token->key_type, $allowed)) {
+            return false;
+        }
+
+        // If this is not a deprecated application token type we can only check that
+        // the user is a root admin at the moment. In a future release we'll be rolling
+        // out more specific permissions for keys.
+        if ($token->key_type === ApiKey::TYPE_ACCOUNT) {
+            return $this->request->user()->root_admin;
+        }
+
+        return AdminAcl::check($token, $resource, AdminAcl::READ);
     }
 
     /**
      * Create a new instance of the transformer and pass along the currently
      * set API key.
      *
-     * @param string $abstract
-     * @param array $parameters
-     * @return \Pterodactyl\Transformers\Api\Application\BaseTransformer
+     * @template T of \Pterodactyl\Transformers\Api\Application\BaseTransformer
+     *
+     * @param class-string<T> $abstract
+     *
+     * @return T
      *
      * @throws \Pterodactyl\Exceptions\Transformer\InvalidTransformerLevelException
+     *
+     * @noinspection PhpUndefinedClassInspection
+     * @noinspection PhpDocSignatureInspection
      */
-    protected function makeTransformer(string $abstract, array $parameters = [])
+    protected function makeTransformer(string $abstract)
     {
-        /** @var \Pterodactyl\Transformers\Api\Application\BaseTransformer $transformer */
-        $transformer = Container::getInstance()->makeWith($abstract, $parameters);
-        $transformer->setKey($this->getKey());
+        Assert::subclassOf($abstract, self::class);
 
-        if (! $transformer instanceof self) {
-            throw new InvalidTransformerLevelException('Calls to ' . __METHOD__ . ' must return a transformer that is an instance of ' . __CLASS__);
-        }
-
-        return $transformer;
+        return $abstract::fromRequest($this->request);
     }
 
     /**
      * Return an ISO-8601 formatted timestamp to use in the API response.
-     *
-     * @param string $timestamp
-     * @return string
      */
     protected function formatTimestamp(string $timestamp): string
     {
-        return Chronos::createFromFormat(Chronos::DEFAULT_TO_STRING_FORMAT, $timestamp)
+        return CarbonImmutable::createFromFormat(CarbonImmutable::DEFAULT_TO_STRING_FORMAT, $timestamp)
             ->setTimezone(self::RESPONSE_TIMEZONE)
             ->toIso8601String();
     }

@@ -5,8 +5,12 @@ namespace Pterodactyl\Models;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Query\JoinClause;
 use Znck\Eloquent\Traits\BelongsToThrough;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Pterodactyl\Exceptions\Http\Server\ServerStateConflictException;
 
 /**
+ * \Pterodactyl\Models\Server.
+ *
  * @property int $id
  * @property string|null $external_id
  * @property string $uuid
@@ -14,42 +18,83 @@ use Znck\Eloquent\Traits\BelongsToThrough;
  * @property int $node_id
  * @property string $name
  * @property string $description
+ * @property string|null $status
  * @property bool $skip_scripts
- * @property bool $suspended
  * @property int $owner_id
  * @property int $memory
  * @property int $swap
  * @property int $disk
  * @property int $io
  * @property int $cpu
- * @property string $threads
+ * @property string|null $threads
  * @property bool $oom_disabled
  * @property int $allocation_id
  * @property int $nest_id
  * @property int $egg_id
  * @property string $startup
  * @property string $image
- * @property int $installed
- * @property int $allocation_limit
- * @property int $database_limit
+ * @property int|null $allocation_limit
+ * @property int|null $database_limit
  * @property int $backup_limit
- * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
- *
- * @property \Pterodactyl\Models\User $user
- * @property \Pterodactyl\Models\Subuser[]|\Illuminate\Database\Eloquent\Collection $subusers
- * @property \Pterodactyl\Models\Allocation $allocation
- * @property \Pterodactyl\Models\Allocation[]|\Illuminate\Database\Eloquent\Collection $allocations
- * @property \Pterodactyl\Models\Node $node
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\ActivityLog[] $activity
+ * @property int|null $activity_count
+ * @property \Pterodactyl\Models\Allocation|null $allocation
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Allocation[] $allocations
+ * @property int|null $allocations_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Backup[] $backups
+ * @property int|null $backups_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Database[] $databases
+ * @property int|null $databases_count
+ * @property \Pterodactyl\Models\Egg|null $egg
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Mount[] $mounts
+ * @property int|null $mounts_count
  * @property \Pterodactyl\Models\Nest $nest
- * @property \Pterodactyl\Models\Egg $egg
- * @property \Pterodactyl\Models\EggVariable[]|\Illuminate\Database\Eloquent\Collection $variables
- * @property \Pterodactyl\Models\Schedule[]|\Illuminate\Database\Eloquent\Collection $schedule
- * @property \Pterodactyl\Models\Database[]|\Illuminate\Database\Eloquent\Collection $databases
- * @property \Pterodactyl\Models\Location $location
- * @property \Pterodactyl\Models\ServerTransfer $transfer
- * @property \Pterodactyl\Models\Backup[]|\Illuminate\Database\Eloquent\Collection $backups
- * @property \Pterodactyl\Models\Mount[]|\Illuminate\Database\Eloquent\Collection $mounts
+ * @property \Pterodactyl\Models\Node $node
+ * @property \Illuminate\Notifications\DatabaseNotificationCollection|\Illuminate\Notifications\DatabaseNotification[] $notifications
+ * @property int|null $notifications_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Schedule[] $schedules
+ * @property int|null $schedules_count
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Subuser[] $subusers
+ * @property int|null $subusers_count
+ * @property \Pterodactyl\Models\ServerTransfer|null $transfer
+ * @property \Pterodactyl\Models\User $user
+ * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\EggVariable[] $variables
+ * @property int|null $variables_count
+ *
+ * @method static \Database\Factories\ServerFactory factory(...$parameters)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder|Server newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder|Server query()
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereAllocationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereAllocationLimit($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereBackupLimit($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereCpu($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereDatabaseLimit($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereDescription($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereDisk($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereEggId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereExternalId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereImage($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereIo($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereMemory($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereNestId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereNodeId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereOomDisabled($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereOwnerId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereSkipScripts($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereStartup($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereSwap($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereThreads($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereUuid($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|Server whereUuidShort($value)
+ * @mixin \Eloquent
  */
 class Server extends Model
 {
@@ -60,11 +105,12 @@ class Server extends Model
      * The resource name for this model when it is transformed into an
      * API representation using fractal.
      */
-    const RESOURCE_NAME = 'server';
+    public const RESOURCE_NAME = 'server';
 
-    const STATUS_INSTALLING = 0;
-    const STATUS_INSTALLED = 1;
-    const STATUS_INSTALL_FAILED = 2;
+    public const STATUS_INSTALLING = 'installing';
+    public const STATUS_INSTALL_FAILED = 'install_failed';
+    public const STATUS_SUSPENDED = 'suspended';
+    public const STATUS_RESTORING_BACKUP = 'restoring_backup';
 
     /**
      * The table associated with the model.
@@ -80,8 +126,16 @@ class Server extends Model
      * @var array
      */
     protected $attributes = [
+        'status' => self::STATUS_INSTALLING,
         'oom_disabled' => true,
     ];
+
+    /**
+     * The default relationships to load for all server models.
+     *
+     * @var string[]
+     */
+    protected $with = ['allocation'];
 
     /**
      * The attributes that should be mutated to dates.
@@ -95,7 +149,7 @@ class Server extends Model
      *
      * @var array
      */
-    protected $guarded = ['id', 'installed', self::CREATED_AT, self::UPDATED_AT, 'deleted_at'];
+    protected $guarded = ['id', self::CREATED_AT, self::UPDATED_AT, 'deleted_at'];
 
     /**
      * @var array
@@ -106,6 +160,7 @@ class Server extends Model
         'name' => 'required|string|min:1|max:191',
         'node_id' => 'required|exists:nodes,id',
         'description' => 'string',
+        'status' => 'nullable|string',
         'memory' => 'required|numeric|min:0',
         'swap' => 'required|numeric|min:-1',
         'io' => 'required|numeric|between:10,1000',
@@ -119,7 +174,6 @@ class Server extends Model
         'startup' => 'required|string',
         'skip_scripts' => 'sometimes|boolean',
         'image' => 'required|string|max:191',
-        'installed' => 'in:0,1,2',
         'database_limit' => 'present|nullable|integer|min:0',
         'allocation_limit' => 'sometimes|nullable|integer|min:0',
         'backup_limit' => 'present|nullable|integer|min:0',
@@ -133,7 +187,6 @@ class Server extends Model
     protected $casts = [
         'node_id' => 'integer',
         'skip_scripts' => 'boolean',
-        'suspended' => 'boolean',
         'owner_id' => 'integer',
         'memory' => 'integer',
         'swap' => 'integer',
@@ -144,7 +197,6 @@ class Server extends Model
         'allocation_id' => 'integer',
         'nest_id' => 'integer',
         'egg_id' => 'integer',
-        'installed' => 'integer',
         'database_limit' => 'integer',
         'allocation_limit' => 'integer',
         'backup_limit' => 'integer',
@@ -152,8 +204,6 @@ class Server extends Model
 
     /**
      * Returns the format for server allocations when communicating with the Daemon.
-     *
-     * @return array
      */
     public function getAllocationMappings(): array
     {
@@ -162,12 +212,14 @@ class Server extends Model
         })->toArray();
     }
 
-    /**
-     * @return bool
-     */
     public function isInstalled(): bool
     {
-        return $this->installed === 1;
+        return $this->status !== self::STATUS_INSTALLING && $this->status !== self::STATUS_INSTALL_FAILED;
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->status === self::STATUS_SUSPENDED;
     }
 
     /**
@@ -265,7 +317,7 @@ class Server extends Model
      *
      * @return \Illuminate\Database\Eloquent\Relations\HasMany
      */
-    public function schedule()
+    public function schedules()
     {
         return $this->hasMany(Schedule::class);
     }
@@ -299,7 +351,7 @@ class Server extends Model
      */
     public function transfer()
     {
-        return $this->hasOne(ServerTransfer::class)->orderByDesc('id');
+        return $this->hasOne(ServerTransfer::class)->whereNull('successful')->orderByDesc('id');
     }
 
     /**
@@ -318,5 +370,32 @@ class Server extends Model
     public function mounts()
     {
         return $this->hasManyThrough(Mount::class, MountServer::class, 'server_id', 'id', 'id', 'mount_id');
+    }
+
+    /**
+     * Returns all of the activity log entries where the server is the subject.
+     */
+    public function activity(): MorphToMany
+    {
+        return $this->morphToMany(ActivityLog::class, 'subject', 'activity_log_subjects');
+    }
+
+    /**
+     * Checks if the server is currently in a user-accessible state. If not, an
+     * exception is raised. This should be called whenever something needs to make
+     * sure the server is not in a weird state that should block user access.
+     *
+     * @throws \Pterodactyl\Exceptions\Http\Server\ServerStateConflictException
+     */
+    public function validateCurrentState()
+    {
+        if (
+            $this->isSuspended() ||
+            !$this->isInstalled() ||
+            $this->status === self::STATUS_RESTORING_BACKUP ||
+            !is_null($this->transfer)
+        ) {
+            throw new ServerStateConflictException($this);
+        }
     }
 }

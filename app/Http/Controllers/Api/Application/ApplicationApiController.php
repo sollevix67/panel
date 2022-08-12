@@ -45,9 +45,6 @@ abstract class ApplicationApiController extends Controller
     /**
      * Perform dependency injection of certain classes needed for core functionality
      * without littering the constructors of classes that extend this abstract.
-     *
-     * @param \Pterodactyl\Extensions\Spatie\Fractalistic\Fractal $fractal
-     * @param \Illuminate\Http\Request $request
      */
     public function loadDependencies(Fractal $fractal, Request $request)
     {
@@ -58,24 +55,24 @@ abstract class ApplicationApiController extends Controller
     /**
      * Return an instance of an application transformer.
      *
-     * @param string $abstract
-     * @return \Pterodactyl\Transformers\Api\Application\BaseTransformer
+     * @template T of \Pterodactyl\Transformers\Api\Application\BaseTransformer
+     *
+     * @param class-string<T> $abstract
+     *
+     * @return T
+     *
+     * @noinspection PhpDocSignatureInspection
+     * @noinspection PhpUndefinedClassInspection
      */
     public function getTransformer(string $abstract)
     {
-        /** @var \Pterodactyl\Transformers\Api\Application\BaseTransformer $transformer */
-        $transformer = Container::getInstance()->make($abstract);
-        $transformer->setKey($this->request->attributes->get('api_key'));
+        Assert::subclassOf($abstract, BaseTransformer::class);
 
-        Assert::isInstanceOf($transformer, BaseTransformer::class);
-
-        return $transformer;
+        return $abstract::fromRequest($this->request);
     }
 
     /**
      * Return a HTTP/204 response for the API.
-     *
-     * @return \Illuminate\Http\Response
      */
     protected function returnNoContent(): Response
     {

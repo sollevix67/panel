@@ -1,18 +1,23 @@
-import React, { useEffect } from 'react';
-import ReactGA from 'react-ga';
+import React, { lazy } from 'react';
 import { hot } from 'react-hot-loader/root';
-import { BrowserRouter, Route, Switch } from 'react-router-dom';
+import { Route, Router, Switch } from 'react-router-dom';
 import { StoreProvider } from 'easy-peasy';
 import { store } from '@/state';
-import DashboardRouter from '@/routers/DashboardRouter';
-import ServerRouter from '@/routers/ServerRouter';
-import AuthenticationRouter from '@/routers/AuthenticationRouter';
-import { Provider } from 'react-redux';
 import { SiteSettings } from '@/state/settings';
 import ProgressBar from '@/components/elements/ProgressBar';
-import NotFound from '@/components/screens/NotFound';
+import { NotFound } from '@/components/elements/ScreenBlock';
 import tw from 'twin.macro';
 import GlobalStylesheet from '@/assets/css/GlobalStylesheet';
+import { history } from '@/components/history';
+import { setupInterceptors } from '@/api/interceptors';
+import AuthenticatedRoute from '@/components/elements/AuthenticatedRoute';
+import { ServerContext } from '@/state/server';
+import '@/assets/tailwind.css';
+import Spinner from '@/components/elements/Spinner';
+
+const DashboardRouter = lazy(() => import(/* webpackChunkName: "dashboard" */ '@/routers/DashboardRouter'));
+const ServerRouter = lazy(() => import(/* webpackChunkName: "server" */ '@/routers/ServerRouter'));
+const AuthenticationRouter = lazy(() => import(/* webpackChunkName: "auth" */ '@/routers/AuthenticationRouter'));
 
 interface ExtendedWindow extends Window {
     SiteConfiguration?: SiteSettings;
@@ -30,8 +35,10 @@ interface ExtendedWindow extends Window {
     };
 }
 
+setupInterceptors(history);
+
 const App = () => {
-    const { PterodactylUser, SiteConfiguration } = (window as ExtendedWindow);
+    const { PterodactylUser, SiteConfiguration } = window as ExtendedWindow;
     if (PterodactylUser && !store.getState().user.data) {
         store.getActions().user.setUserData({
             uuid: PterodactylUser.uuid,
@@ -49,28 +56,37 @@ const App = () => {
         store.getActions().settings.setSettings(SiteConfiguration!);
     }
 
-    useEffect(() => {
-        ReactGA.initialize(SiteConfiguration!.analytics);
-        ReactGA.pageview(location.pathname);
-    }, []);
-
     return (
         <>
-            <GlobalStylesheet/>
+            <GlobalStylesheet />
             <StoreProvider store={store}>
-                <Provider store={store}>
-                    <ProgressBar/>
-                    <div css={tw`mx-auto w-auto`}>
-                        <BrowserRouter basename={'/'} key={'root-router'}>
-                            <Switch>
-                                <Route path="/server/:id" component={ServerRouter}/>
-                                <Route path="/auth" component={AuthenticationRouter}/>
-                                <Route path="/" component={DashboardRouter}/>
-                                <Route path={'*'} component={NotFound}/>
-                            </Switch>
-                        </BrowserRouter>
-                    </div>
-                </Provider>
+                <ProgressBar />
+                <div css={tw`mx-auto w-auto`}>
+                    <Router history={history}>
+                        <Switch>
+                            <Route path={'/auth'}>
+                                <Spinner.Suspense>
+                                    <AuthenticationRouter />
+                                </Spinner.Suspense>
+                            </Route>
+                            <AuthenticatedRoute path={'/server/:id'}>
+                                <Spinner.Suspense>
+                                    <ServerContext.Provider>
+                                        <ServerRouter />
+                                    </ServerContext.Provider>
+                                </Spinner.Suspense>
+                            </AuthenticatedRoute>
+                            <AuthenticatedRoute path={'/'}>
+                                <Spinner.Suspense>
+                                    <DashboardRouter />
+                                </Spinner.Suspense>
+                            </AuthenticatedRoute>
+                            <Route path={'*'}>
+                                <NotFound />
+                            </Route>
+                        </Switch>
+                    </Router>
+                </div>
             </StoreProvider>
         </>
     );

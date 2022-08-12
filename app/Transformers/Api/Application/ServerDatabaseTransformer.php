@@ -2,19 +2,14 @@
 
 namespace Pterodactyl\Transformers\Api\Application;
 
-use Cake\Chronos\Chronos;
 use Pterodactyl\Models\Database;
-use League\Fractal\Resource\Item;
 use Pterodactyl\Models\DatabaseHost;
 use Pterodactyl\Services\Acl\Api\AdminAcl;
 use Illuminate\Contracts\Encryption\Encrypter;
 
 class ServerDatabaseTransformer extends BaseTransformer
 {
-    /**
-     * @var array
-     */
-    protected $availableIncludes = ['password', 'host'];
+    protected array $availableIncludes = ['password', 'host'];
 
     /**
      * @var Encrypter
@@ -23,8 +18,6 @@ class ServerDatabaseTransformer extends BaseTransformer
 
     /**
      * Perform dependency injection.
-     *
-     * @param \Illuminate\Contracts\Encryption\Encrypter $encrypter
      */
     public function handle(Encrypter $encrypter)
     {
@@ -33,8 +26,6 @@ class ServerDatabaseTransformer extends BaseTransformer
 
     /**
      * Return the resource name for the JSONAPI output.
-     *
-     * @return string
      */
     public function getResourceName(): string
     {
@@ -43,9 +34,6 @@ class ServerDatabaseTransformer extends BaseTransformer
 
     /**
      * Transform a database model in a representation for the application API.
-     *
-     * @param \Pterodactyl\Models\Database $model
-     * @return array
      */
     public function transform(Database $model): array
     {
@@ -57,22 +45,17 @@ class ServerDatabaseTransformer extends BaseTransformer
             'username' => $model->username,
             'remote' => $model->remote,
             'max_connections' => $model->max_connections,
-            'created_at' => Chronos::createFromFormat(Chronos::DEFAULT_TO_STRING_FORMAT, $model->created_at)
-                ->setTimezone(config('app.timezone'))
-                ->toIso8601String(),
-            'updated_at' => Chronos::createFromFormat(Chronos::DEFAULT_TO_STRING_FORMAT, $model->updated_at)
-                ->setTimezone(config('app.timezone'))
-                ->toIso8601String(),
+            'created_at' => $model->created_at->toIso8601String(),
+            'updated_at' => $model->updated_at->toIso8601String(),
         ];
     }
 
     /**
      * Include the database password in the request.
      *
-     * @param \Pterodactyl\Models\Database $model
      * @return \League\Fractal\Resource\Item
      */
-    public function includePassword(Database $model): Item
+    public function includePassword(Database $model)
     {
         return $this->item($model, function (Database $model) {
             return [
@@ -84,13 +67,13 @@ class ServerDatabaseTransformer extends BaseTransformer
     /**
      * Return the database host relationship for this server database.
      *
-     * @param \Pterodactyl\Models\Database $model
      * @return \League\Fractal\Resource\Item|\League\Fractal\Resource\NullResource
+     *
      * @throws \Pterodactyl\Exceptions\Transformer\InvalidTransformerLevelException
      */
     public function includeHost(Database $model)
     {
-        if (! $this->authorize(AdminAcl::RESOURCE_DATABASE_HOSTS)) {
+        if (!$this->authorize(AdminAcl::RESOURCE_DATABASE_HOSTS)) {
             return $this->null();
         }
 

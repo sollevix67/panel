@@ -1,5 +1,5 @@
 import getServer, { Server } from '@/api/server/getServer';
-import { action, Action, createContextStore, thunk, Thunk } from 'easy-peasy';
+import { action, Action, computed, Computed, createContextStore, thunk, Thunk } from 'easy-peasy';
 import socket, { SocketStore } from './socket';
 import files, { ServerFileStore } from '@/state/server/files';
 import subusers, { ServerSubuserStore } from '@/state/server/subusers';
@@ -12,6 +12,8 @@ export type ServerStatus = 'offline' | 'starting' | 'stopping' | 'running' | nul
 
 interface ServerDataStore {
     data?: Server;
+    inConflictState: Computed<ServerDataStore, boolean>;
+    isInstalling: Computed<ServerDataStore, boolean>;
     permissions: string[];
 
     getServer: Thunk<ServerDataStore, string, Record<string, unknown>, ServerStore, Promise<void>>;
@@ -23,8 +25,20 @@ interface ServerDataStore {
 const server: ServerDataStore = {
     permissions: [],
 
+    inConflictState: computed((state) => {
+        if (!state.data) {
+            return false;
+        }
+
+        return state.data.status !== null || state.data.isTransferring;
+    }),
+
+    isInstalling: computed((state) => {
+        return state.data?.status === 'installing' || state.data?.status === 'install_failed';
+    }),
+
     getServer: thunk(async (actions, payload) => {
-        const [ server, permissions ] = await getServer(payload);
+        const [server, permissions] = await getServer(payload);
 
         actions.setServer(server);
         actions.setPermissions(permissions);
@@ -73,34 +87,37 @@ export interface ServerStore {
     clearServerState: Action<ServerStore>;
 }
 
-export const ServerContext = createContextStore<ServerStore>({
-    server,
-    socket,
-    status,
-    databases,
-    files,
-    subusers,
-    schedules,
-    clearServerState: action(state => {
-        state.server.data = undefined;
-        state.server.permissions = [];
-        state.databases.data = [];
-        state.subusers.data = [];
-        state.files.directory = '/';
-        state.files.selectedFiles = [];
-        state.schedules.data = [];
+export const ServerContext = createContextStore<ServerStore>(
+    {
+        server,
+        socket,
+        status,
+        databases,
+        files,
+        subusers,
+        schedules,
+        clearServerState: action((state) => {
+            state.server.data = undefined;
+            state.server.permissions = [];
+            state.databases.data = [];
+            state.subusers.data = [];
+            state.files.directory = '/';
+            state.files.selectedFiles = [];
+            state.schedules.data = [];
 
-        if (state.socket.instance) {
-            state.socket.instance.removeAllListeners();
-            state.socket.instance.close();
-        }
+            if (state.socket.instance) {
+                state.socket.instance.removeAllListeners();
+                state.socket.instance.close();
+            }
 
-        state.socket.instance = null;
-        state.socket.connected = false;
-    }),
-}, {
-    compose: composeWithDevTools({
-        name: 'ServerStore',
-        trace: true,
-    }),
-});
+            state.socket.instance = null;
+            state.socket.connected = false;
+        }),
+    },
+    {
+        compose: composeWithDevTools({
+            name: 'ServerStore',
+            trace: true,
+        }),
+    }
+);

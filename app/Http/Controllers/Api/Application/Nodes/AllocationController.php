@@ -5,6 +5,9 @@ namespace Pterodactyl\Http\Controllers\Api\Application\Nodes;
 use Pterodactyl\Models\Node;
 use Illuminate\Http\JsonResponse;
 use Pterodactyl\Models\Allocation;
+use Spatie\QueryBuilder\QueryBuilder;
+use Spatie\QueryBuilder\AllowedFilter;
+use Illuminate\Database\Eloquent\Builder;
 use Pterodactyl\Services\Allocations\AssignmentService;
 use Pterodactyl\Services\Allocations\AllocationDeletionService;
 use Pterodactyl\Transformers\Api\Application\AllocationTransformer;
@@ -27,9 +30,6 @@ class AllocationController extends ApplicationApiController
 
     /**
      * AllocationController constructor.
-     *
-     * @param \Pterodactyl\Services\Allocations\AssignmentService $assignmentService
-     * @param \Pterodactyl\Services\Allocations\AllocationDeletionService $deletionService
      */
     public function __construct(
         AssignmentService $assignmentService,
@@ -43,14 +43,23 @@ class AllocationController extends ApplicationApiController
 
     /**
      * Return all of the allocations that exist for a given node.
-     *
-     * @param \Pterodactyl\Http\Requests\Api\Application\Allocations\GetAllocationsRequest $request
-     * @param \Pterodactyl\Models\Node $node
-     * @return array
      */
     public function index(GetAllocationsRequest $request, Node $node): array
     {
-        $allocations = $node->allocations()->paginate(50);
+        $allocations = QueryBuilder::for($node->allocations())
+            ->allowedFilters([
+                AllowedFilter::exact('ip'),
+                AllowedFilter::exact('port'),
+                'ip_alias',
+                AllowedFilter::callback('server_id', function (Builder $builder, $value) {
+                    if (empty($value) || is_bool($value) || !ctype_digit((string) $value)) {
+                        return $builder->whereNull('server_id');
+                    }
+
+                    return $builder->where('server_id', $value);
+                }),
+            ])
+            ->paginate($request->query('per_page') ?? 50);
 
         return $this->fractal->collection($allocations)
             ->transformWith($this->getTransformer(AllocationTransformer::class))
@@ -60,10 +69,7 @@ class AllocationController extends ApplicationApiController
     /**
      * Store new allocations for a given node.
      *
-     * @param \Pterodactyl\Http\Requests\Api\Application\Allocations\StoreAllocationRequest $request
-     * @param \Pterodactyl\Models\Node $node
-     * @return \Illuminate\Http\JsonResponse
-     *
+     * @throws \Pterodactyl\Exceptions\DisplayException
      * @throws \Pterodactyl\Exceptions\Service\Allocation\CidrOutOfRangeException
      * @throws \Pterodactyl\Exceptions\Service\Allocation\InvalidPortMappingException
      * @throws \Pterodactyl\Exceptions\Service\Allocation\PortOutOfRangeException
@@ -78,11 +84,6 @@ class AllocationController extends ApplicationApiController
 
     /**
      * Delete a specific allocation from the Panel.
-     *
-     * @param \Pterodactyl\Http\Requests\Api\Application\Allocations\DeleteAllocationRequest $request
-     * @param \Pterodactyl\Models\Node $node
-     * @param \Pterodactyl\Models\Allocation $allocation
-     * @return \Illuminate\Http\JsonResponse
      *
      * @throws \Pterodactyl\Exceptions\Service\Allocation\ServerUsingAllocationException
      */

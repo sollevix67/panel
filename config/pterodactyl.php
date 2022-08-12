@@ -10,7 +10,7 @@ return [
     | setup on the panel. When set to true, configurations stored in the
     | database will not be applied.
     */
-    'load_environment_only' => (bool)env('APP_ENVIRONMENT_ONLY', false),
+    'load_environment_only' => (bool) env('APP_ENVIRONMENT_ONLY', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -84,8 +84,8 @@ return [
     | Configure the timeout to be used for Guzzle connections here.
     */
     'guzzle' => [
-        'timeout' => env('GUZZLE_TIMEOUT', 30),
-        'connect_timeout' => env('GUZZLE_CONNECT_TIMEOUT', 10),
+        'timeout' => env('GUZZLE_TIMEOUT', 15),
+        'connect_timeout' => env('GUZZLE_CONNECT_TIMEOUT', 5),
     ],
 
     /*
@@ -141,7 +141,13 @@ return [
 
         'schedules' => [
             // The total number of tasks that can exist for any given schedule at once.
-            'per_schedule_task_limit' => 10,
+            'per_schedule_task_limit' => env('PTERODACTYL_PER_SCHEDULE_TASK_LIMIT', 10),
+        ],
+
+        'allocations' => [
+            'enabled' => env('PTERODACTYL_CLIENT_ALLOCATIONS_ENABLED', false),
+            'range_start' => env('PTERODACTYL_CLIENT_ALLOCATIONS_RANGE_START'),
+            'range_end' => env('PTERODACTYL_CLIENT_ALLOCATIONS_RANGE_END'),
         ],
     ],
 

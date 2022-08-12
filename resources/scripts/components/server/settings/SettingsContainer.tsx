@@ -9,37 +9,37 @@ import ReinstallServerBox from '@/components/server/settings/ReinstallServerBox'
 import tw from 'twin.macro';
 import Input from '@/components/elements/Input';
 import Label from '@/components/elements/Label';
-import { LinkButton } from '@/components/elements/Button';
 import ServerContentBlock from '@/components/elements/ServerContentBlock';
+import isEqual from 'react-fast-compare';
+import CopyOnClick from '@/components/elements/CopyOnClick';
+import { ip } from '@/lib/formatters';
+import { Button } from '@/components/elements/button/index';
 
 export default () => {
-    const username = useStoreState(state => state.user.data!.username);
-    const id = ServerContext.useStoreState(state => state.server.data!.id);
-    const sftpIp = ServerContext.useStoreState(state => state.server.data!.sftpDetails.ip);
-    const sftpPort = ServerContext.useStoreState(state => state.server.data!.sftpDetails.port);
+    const username = useStoreState((state) => state.user.data!.username);
+    const id = ServerContext.useStoreState((state) => state.server.data!.id);
+    const uuid = ServerContext.useStoreState((state) => state.server.data!.uuid);
+    const node = ServerContext.useStoreState((state) => state.server.data!.node);
+    const sftp = ServerContext.useStoreState((state) => state.server.data!.sftpDetails, isEqual);
 
     return (
         <ServerContentBlock title={'Settings'}>
-            <FlashMessageRender byKey={'settings'} css={tw`mb-4`}/>
+            <FlashMessageRender byKey={'settings'} css={tw`mb-4`} />
             <div css={tw`md:flex`}>
                 <div css={tw`w-full md:flex-1 md:mr-10`}>
                     <Can action={'file.sftp'}>
                         <TitledGreyBox title={'SFTP Details'} css={tw`mb-6 md:mb-10`}>
                             <div>
                                 <Label>Server Address</Label>
-                                <Input
-                                    type={'text'}
-                                    value={`sftp://${sftpIp}:${sftpPort}`}
-                                    readOnly
-                                />
+                                <CopyOnClick text={`sftp://${ip(sftp.ip)}:${sftp.port}`}>
+                                    <Input type={'text'} value={`sftp://${ip(sftp.ip)}:${sftp.port}`} readOnly />
+                                </CopyOnClick>
                             </div>
                             <div css={tw`mt-6`}>
                                 <Label>Username</Label>
-                                <Input
-                                    type={'text'}
-                                    value={`${username}.${id}`}
-                                    readOnly
-                                />
+                                <CopyOnClick text={`${username}.${id}`}>
+                                    <Input type={'text'} value={`${username}.${id}`} readOnly />
+                                </CopyOnClick>
                             </div>
                             <div css={tw`mt-6 flex items-center`}>
                                 <div css={tw`flex-1`}>
@@ -50,25 +50,34 @@ export default () => {
                                     </div>
                                 </div>
                                 <div css={tw`ml-4`}>
-                                    <LinkButton
-                                        isSecondary
-                                        href={`sftp://${username}.${id}@${sftpIp}:${sftpPort}`}
-                                    >
-                                        Launch SFTP
-                                    </LinkButton>
+                                    <a href={`sftp://${username}.${id}@${ip(sftp.ip)}:${sftp.port}`}>
+                                        <Button.Text variant={Button.Variants.Secondary}>Launch SFTP</Button.Text>
+                                    </a>
                                 </div>
                             </div>
                         </TitledGreyBox>
                     </Can>
+                    <TitledGreyBox title={'Debug Information'} css={tw`mb-6 md:mb-10`}>
+                        <div css={tw`flex items-center justify-between text-sm`}>
+                            <p>Node</p>
+                            <code css={tw`font-mono bg-neutral-900 rounded py-1 px-2`}>{node}</code>
+                        </div>
+                        <CopyOnClick text={uuid}>
+                            <div css={tw`flex items-center justify-between mt-2 text-sm`}>
+                                <p>Server ID</p>
+                                <code css={tw`font-mono bg-neutral-900 rounded py-1 px-2`}>{uuid}</code>
+                            </div>
+                        </CopyOnClick>
+                    </TitledGreyBox>
                 </div>
                 <div css={tw`w-full mt-6 md:flex-1 md:mt-0`}>
                     <Can action={'settings.rename'}>
                         <div css={tw`mb-6 md:mb-10`}>
-                            <RenameServerBox/>
+                            <RenameServerBox />
                         </div>
                     </Can>
                     <Can action={'settings.reinstall'}>
-                        <ReinstallServerBox/>
+                        <ReinstallServerBox />
                     </Can>
                 </div>
             </div>
