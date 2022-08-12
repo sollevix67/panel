@@ -23,8 +23,8 @@ jobs:
       - uses: docker/login-action@v1
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.REGISTRY_TOKEN }}
+          username: ${{ sollevix67 }}
+          password: ${{ dckr_pat_ZEcibb2J5jbv1fK2gBXP3NizOfY }}
       - name: Bump Version
         if: "!contains(github.ref, 'develop')"
         env:
